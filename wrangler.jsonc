@@ -4,6 +4,9 @@
   "name": "mini-cdp",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // Off so the bundler does not wrap functions in __name(). next-themes turns
+  // its theme function into an inline <script>, and the browser has no __name.
+  "keep_names": false,
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "mini-cdp" }],
   // Settings that are not secret. DATABASE_URL and GEMINI_API_KEY are set
