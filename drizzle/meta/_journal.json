@@ -8,6 +8,27 @@
       "when": 1791833315514,
       "tag": "0000_initial_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791937471203,
+      "tag": "0001_people_segments_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791988394719,
+      "tag": "0002_assistant_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791988395623,
+      "tag": "0003_assistant_privacy_views",
+      "breakpoints": true
     }
   ]
 }

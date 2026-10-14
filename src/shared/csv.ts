@@ -24,3 +24,18 @@ export function requireColumns(
     throw new Error(`${fileName} is missing column(s): ${missing.join(", ")}`);
   }
 }
+
+export type CsvValue = string | number | boolean | null;
+
+/** Writes one value so that commas, quotes and line breaks survive. */
+function csvCell(value: CsvValue): string {
+  let text = value === null ? "" : String(value);
+  // A spreadsheet runs a cell that starts with one of these as a formula.
+  if (/^[=+\-@]/.test(text)) text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+/** Builds CSV text from a header row and data rows. */
+export function toCsv(headers: string[], rows: CsvValue[][]): string {
+  return [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { chunk, unique } from "@/shared/collections";
 import { INSERT_BATCH_SIZE, insertInChunks } from "@/shared/db/bulk";
@@ -99,9 +99,20 @@ async function createPeopleForIdentifiers(
   return created;
 }
 
+/** Removes people who were created a moment ago but ended up owning nothing. */
+async function removeUnlinkedPeople(db: Db, personIds: string[]): Promise<void> {
+  for (const batch of chunk(personIds, INSERT_BATCH_SIZE)) {
+    await db.delete(people).where(inArray(people.id, batch));
+  }
+}
+
 /**
  * Finds the person behind each identifier, creating a person for any value
  * that has not been seen before. Every value gets an entry in the result.
+ *
+ * Two requests can meet the same new value at the same moment. Only one of
+ * them wins the identifier, so the owners are read back after creating, and
+ * a person created by the loser is removed again.
  */
 export async function findOrCreatePeopleByIdentifiers(
   db: Db,
@@ -111,8 +122,30 @@ export async function findOrCreatePeopleByIdentifiers(
 ): Promise<PersonIdByValue> {
   const known = await findPeopleByIdentifiers(db, type, values);
   const unseen = normalizeAll(type, values).filter((value) => !known.has(value));
+  if (unseen.length === 0) return known;
+
   const created = await createPeopleForIdentifiers(db, type, unseen, source);
-  return new Map([...known, ...created]);
+  const owners = await findPeopleByIdentifiers(db, type, unseen);
+  const winners = new Set(owners.values());
+  await removeUnlinkedPeople(
+    db,
+    [...created.values()].filter((personId) => !winners.has(personId)),
+  );
+  return new Map([...known, ...owners]);
+}
+
+/** Every identifier that points at one person, oldest first. */
+export async function listIdentifiers(db: Db, personId: string) {
+  return db
+    .select({
+      type: identifiers.type,
+      value: identifiers.value,
+      source: identifiers.source,
+      createdAt: identifiers.createdAt,
+    })
+    .from(identifiers)
+    .where(eq(identifiers.personId, personId))
+    .orderBy(asc(identifiers.createdAt), asc(identifiers.type), asc(identifiers.value));
 }
 
 /** Finds the person one identifier belongs to, or null if nobody owns it. */
@@ -134,4 +167,23 @@ export async function findOrCreatePerson(
 ): Promise<string> {
   const found = await findOrCreatePeopleByIdentifiers(db, type, [value], source);
   return found.get(normalizeIdentifier(type, value))!;
+}
+
+/**
+ * The email for each of a set of people, for showing a list to a signed-in
+ * teammate. People with no email are left out of the result.
+ */
+export async function listEmailsForPeople(db: Db, personIds: string[]): Promise<Map<string, string>> {
+  const emails = new Map<string, string>();
+  for (const batch of chunk(unique(personIds), INSERT_BATCH_SIZE)) {
+    const rows = await db
+      .select({ personId: identifiers.personId, value: identifiers.value })
+      .from(identifiers)
+      .where(and(eq(identifiers.type, "email"), inArray(identifiers.personId, batch)))
+      .orderBy(asc(identifiers.createdAt), asc(identifiers.value));
+    for (const row of rows) {
+      if (!emails.has(row.personId)) emails.set(row.personId, row.value);
+    }
+  }
+  return emails;
 }

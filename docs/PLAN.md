@@ -76,7 +76,7 @@ One deploy and one database: fewer moving parts leaves more time for the five re
 | Schema and queries | Drizzle | Typed schema and migrations, plain SQL where it reads better |
 | UI | Tailwind and shadcn/ui | A clean interface, fast |
 | Validation | Zod | One schema each for the webhook payload and segment rules |
-| AI | Provider on hold | Any model with tool calling fits |
+| AI | Gemini API, free tier | Free to run; any model with tool calling fits the design |
 | Tests | Vitest | Import counts, webhook replay, PII scan |
 
 ```mermaid
@@ -285,7 +285,7 @@ Each step ends with a check against a number from the data, so progress is prova
 7. **Extras:** channel quality board, export and beehiiv stub, live feed.
 8. **README and Loom outline:** design decisions, trade-offs, what comes next with more time.
 
-Progress: step 1 is built. The import loads the real files and its test confirms all seven counts. The Import report page shows them.
+Progress: steps 1 to 5 are built and tested (import, lookup, segments, webhook, assistant on the Gemini API free tier). The engagement score from step 3 is not built yet. Next: the login (step 6).
 
 ## Open questions
 
@@ -297,5 +297,5 @@ Progress: step 1 is built. The import loads the real files and its test confirms
 - [x] **"Haven't opened in 30 days":** decided. Includes people who never opened, tagged Never opened.
 - [ ] **Webhook auth:** building as proposed unless you say otherwise. The login guards a Settings page where API keys are made, and the mobile app sends one of those keys.
 - [ ] **Repo name and visibility:** `mini-cdp` created under www. Public or private on GitHub?
-- [ ] **AI provider:** on hold at your request.
+- [x] **AI provider:** Google Gemini API free tier (`gemini-3.8-flash`, falling back to `gemini-3.5-flash-lite`).
 - [ ] **Time budget:** the deadline and hours available decide how far down the extras list to go.

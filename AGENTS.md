@@ -20,4 +20,5 @@ The design is in `docs/PLAN.md`. Read it before adding a feature.
 - **Each app owns its tables** in its own `schema.ts` and its own Postgres schema. After changing one, run `npm run db:generate`.
 - **Data functions take `db` as their first argument**, so they run the same against the app database, inside a transaction, and in tests.
 - **Pages show live data.** A page that reads the database calls `getLiveDb()` inside a component wrapped in `<Suspense>`.
+- **Server actions stay thin.** Put the logic in a function under `src/apps` that takes `db`, test that, and have the action call it.
 - **Database tests use `createTestDb()`** from `src/shared/db/testing.ts`. No database server is needed.

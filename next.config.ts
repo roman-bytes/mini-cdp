@@ -12,8 +12,8 @@ const nextConfig: NextConfig = {
     },
   },
   async redirects() {
-    // The import report is the first screen until the People app lands.
-    return [{ source: "/", destination: "/imports", permanent: false }];
+    // People is the home screen.
+    return [{ source: "/", destination: "/people", permanent: false }];
   },
 };
 

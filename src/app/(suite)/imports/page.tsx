@@ -6,21 +6,13 @@ import { ImportChecks } from "@/apps/imports/components/import-checks";
 import { ImportIssuesTable } from "@/apps/imports/components/import-issues-table";
 import { getImportReport, type ImportReport } from "@/apps/imports/report";
 import { LoadingMessage } from "@/components/loading-message";
+import { PageHeader, Section } from "@/components/page-header";
 import { getLiveDb } from "@/shared/db/live";
 
 export const metadata: Metadata = { title: "Import report" };
 
 function hasImportedRows(report: ImportReport): boolean {
   return report.files.some((file) => file.total > 0);
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="space-y-3">
-      <h2 className="font-heading text-lg font-semibold">{title}</h2>
-      {children}
-    </section>
-  );
 }
 
 function NothingImported() {
@@ -55,12 +47,10 @@ async function ImportReportSections() {
 export default function ImportReportPage() {
   return (
     <div className="space-y-10">
-      <header className="space-y-1">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Import report</h1>
-        <p className="text-muted-foreground">
-          What happened to every row of the three source files, and how they linked up.
-        </p>
-      </header>
+      <PageHeader
+        title="Import report"
+        description="What happened to every row of the three source files, and how they linked up."
+      />
 
       {/* The heading shows at once; the numbers stream in when the query returns. */}
       <Suspense fallback={<LoadingMessage />}>

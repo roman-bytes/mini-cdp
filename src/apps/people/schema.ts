@@ -1,4 +1,4 @@
-import { index, pgSchema, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, jsonb, pgSchema, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 /**
  * People is the one place a person lives. Emails and every other identifier
@@ -38,3 +38,12 @@ export const identifiers = peopleSchema.table(
     index("identifiers_person_id_idx").on(table.personId),
   ],
 );
+
+/** A saved segment: a name and the rules that pick its people. */
+export const segments = peopleSchema.table("segments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  /** The rules as JSON. Its shape is checked in apps/segments/definition.ts. */
+  definition: jsonb("definition").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
