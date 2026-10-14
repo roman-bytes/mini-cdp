@@ -11,7 +11,7 @@ describe("requireEnv", () => {
 
   it("explains how to fix a missing value", () => {
     expect(() => requireEnv("DATABASE_URL", {})).toThrow(
-      "DATABASE_URL is not set. Copy .env.example to .env.local and fill it in.",
+      'DATABASE_URL is not set. Locally, copy .env.example to .env.local and fill it in; on Cloudflare, set it with "npx wrangler secret put DATABASE_URL".',
     );
   });
 

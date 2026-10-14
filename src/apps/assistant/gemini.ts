@@ -17,7 +17,7 @@ import type { ChatTurn, ModelProvider, ModelReply, SentRequest, ToolCall, ToolSp
 /**
  * Free-tier models to try, in order. The first is the stronger model; when
  * it is out of free quota or too busy, the run moves to the next one.
- * Override with GEMINI_MODEL (comma-separated) in .env.local.
+ * Override with GEMINI_MODEL (comma-separated) in the environment.
  */
 export const DEFAULT_GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
 
@@ -163,7 +163,7 @@ export function describeGeminiError(error: unknown): string {
     return "Gemini is too busy to answer right now (high demand on Google's side). Try again in a minute.";
   }
   if (error instanceof ApiError && (error.status === 400 || error.status === 401 || error.status === 403)) {
-    return `Gemini refused the request (${error.status}). Check that GEMINI_API_KEY in .env.local is a valid key.`;
+    return `Gemini refused the request (${error.status}). Check that GEMINI_API_KEY is a valid key.`;
   }
   if (error instanceof ApiError) return `The Gemini API returned an error (${error.status}).`;
   return error instanceof Error ? error.message : String(error);
@@ -176,7 +176,7 @@ function liveGenerate(): GenerateFunction {
   let client: GoogleGenAI | undefined;
   return (request) => {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY is not set. Add your key from Google AI Studio to .env.local.");
+    if (!apiKey) throw new Error("GEMINI_API_KEY is not set. Add your key from Google AI Studio to .env.local, or as a Cloudflare secret when deployed.");
     client ??= new GoogleGenAI({ apiKey, httpOptions: { retryOptions: GEMINI_RETRY_OPTIONS } });
     return client.models.generateContent(request);
   };

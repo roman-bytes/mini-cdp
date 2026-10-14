@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { closeDb, getDb } from "./client";
+import { closeDb, getDb, isCloudflareWorker } from "./client";
 
 describe("getDb", () => {
   afterEach(async () => {
@@ -18,5 +18,20 @@ describe("getDb", () => {
     vi.stubEnv("DATABASE_URL", "postgres://user:pass@localhost:1/none");
 
     expect(() => getDb()).not.toThrow();
+  });
+
+  it("opens a database per request on Cloudflare Workers", () => {
+    vi.stubEnv("DATABASE_URL", "postgres://user:pass@localhost:1/none");
+    vi.stubGlobal("navigator", { userAgent: "Cloudflare-Workers" });
+
+    expect(isCloudflareWorker()).toBe(true);
+    expect(() => getDb()).not.toThrow();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("isCloudflareWorker", () => {
+  it("is false under Node", () => {
+    expect(isCloudflareWorker()).toBe(false);
   });
 });

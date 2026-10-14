@@ -13,11 +13,14 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts",
     "db:import": "tsx --env-file-if-exists=.env.local scripts/import.ts",
-    "check": "npm run lint && npm run typecheck && npm run test"
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
     "@google/genai": "^2.29.1",
+    "@opennextjs/cloudflare": "^1.20.11",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
     "csv-parse": "^7.0.3",
@@ -51,6 +54,7 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
-    "vitest": "^5.0.4"
+    "vitest": "^5.0.4",
+    "wrangler": "^4.151.0"
   }
 }

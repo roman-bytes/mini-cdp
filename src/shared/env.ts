@@ -6,7 +6,7 @@ export function requireEnv(
   const value = env[name];
   if (!value) {
     throw new Error(
-      `${name} is not set. Copy .env.example to .env.local and fill it in.`,
+      `${name} is not set. Locally, copy .env.example to .env.local and fill it in; on Cloudflare, set it with "npx wrangler secret put ${name}".`,
     );
   }
   return value;

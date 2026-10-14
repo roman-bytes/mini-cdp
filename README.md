@@ -6,7 +6,7 @@ The full design is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Status
 
-Steps 1 to 5 of the 8 in the plan are built. There is no login yet, so do not deploy it.
+Steps 1 to 5 of the 8 in the plan are built, and it is deployed on Cloudflare Workers. There is no login yet, so the deployed app is open to anyone with the link.
 
 | Requirement | State | Where |
 | --- | --- | --- |
@@ -51,6 +51,32 @@ npm run dev                  # http://localhost:3000
 ```
 
 `npm run db:import` prints the import report when it finishes, and is safe to run again.
+
+## Deploy (Cloudflare Workers)
+
+The app runs on Cloudflare Workers through the [OpenNext adapter](https://opennext.js.org/cloudflare).
+
+One-time setup:
+
+```bash
+npx wrangler login
+npx wrangler secret put DATABASE_URL     # the Neon *pooled* connection string
+npx wrangler secret put GEMINI_API_KEY
+```
+
+Then, after committing:
+
+```bash
+npm run deploy
+```
+
+`scripts/deploy.sh` builds from a clean checkout of the last commit. The build copies any `.env` files
+it finds into the Worker, so building in your working folder would put `.env.local`'s secrets into the
+uploaded code; on Cloudflare they live only as encrypted secrets. `CDP_TODAY` is a plain setting in
+`wrangler.jsonc`.
+
+On Workers a database connection may not be shared between requests, so `getDb()` opens one per request
+there (and keeps one shared pool locally, in tests and in scripts).
 
 ## Commands
 
@@ -191,7 +217,7 @@ Each open page asks a small endpoint every two seconds whether anything changed:
 `GET /api/people/v1/:id/activity-marker` for a profile. Each answers with a short value that changes when
 an event arrives (one indexed query). Only when it changes does the page re-read its data from the server.
 Checks pause while the tab is in the background. This needs no long-lived connections, so it works the
-same on Vercel's serverless functions. "Green" is measured from when an event *arrived*, not its
+the same on Cloudflare Workers. "Green" is measured from when an event *arrived*, not its
 `timestamp`, since a device can send an old event late.
 
 The proof that order and repeats do not matter is `src/apps/mobile/ingest-event.test.ts`: one event
