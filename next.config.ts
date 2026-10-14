@@ -6,8 +6,10 @@ const nextConfig: NextConfig = {
   // Keep pg out of the bundle and copy pg-cloudflare whole.
   serverExternalPackages: ["pg"],
   outputFileTracingIncludes: { "/**": ["./node_modules/pg-cloudflare/**/*"] },
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Cache Components (and partial prefetching, which needs it) stay off: its
+  // staged rendering depends on Node's timers, and on Cloudflare Workers pages
+  // hang ("cannot guarantee that Cache Components will run as expected").
+  // Pages still read live data inside <Suspense> after connection().
   turbopack: {
     rules: {
       "*.css": {
