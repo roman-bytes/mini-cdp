@@ -75,6 +75,10 @@ it finds into the Worker, so building in your working folder would put `.env.loc
 uploaded code; on Cloudflare they live only as encrypted secrets. `CDP_TODAY` is a plain setting in
 `wrangler.jsonc`.
 
+`patches/` holds a one-line fix for the adapter (applied by `patch-package` after every install):
+Next.js 16.4 reads `.next/server/preview-props.json` at startup, and adapter 1.20.11 does not bundle
+that file, so every request failed. Remove the patch once the adapter handles it.
+
 On Workers a database connection may not be shared between requests, so `getDb()` opens one per request
 there (and keeps one shared pool locally, in tests and in scripts).
 
