@@ -11,14 +11,29 @@ Steps 1 to 5 of the 8 in the plan are built. There is no login yet, so do not de
 | Requirement | State | Where |
 | --- | --- | --- |
 | 1. Load, link and dedupe the three files | Built and tested | `/imports` |
-| 2. Look up a subscriber | Built and tested | `/people` (the home screen), then open a person |
+| 2. Look up a subscriber | Built and tested | The search box in the top bar (Cmd/Ctrl+K) on any page, or `/people` |
 | 3. Build a segment | Built and tested | `/segments` |
 | 4. `POST /webhooks/app` | Built and tested | `/mobile` shows events; `/settings/api-keys` makes keys |
 | 5. AI assistant that never sees PII | Built and tested; needs `GEMINI_API_KEY` | `/assistant` |
 
-The home screen is People: four headline numbers, three charts (new subscribers per week, where
-subscribers can be reached, engagement by signup source), then the full list. Every chart has a
-"Show as table" view. While searching or paging, the numbers step aside so results come first.
+The screens:
+
+- **Home** (`/`): four headline numbers and three charts (new subscribers per week, where subscribers
+  can be reached, engagement by signup source). Every chart has a "Show as table" view.
+- **People** (`/people`): one big table with search, six filters (type, status, signup source, email
+  engagement, app account, website) and sortable columns. Every view has its own shareable address.
+- **Find a person from anywhere**: the search box in the top bar matches emails and user, visitor and
+  device IDs as you type. Cmd/Ctrl+K jumps to it; Enter opens the highlighted person, or every match on
+  the People page. It is served by `GET /api/people/v1/search?q=`.
+- **Segments** (`/segments`): the rule builder. Nothing is counted until a rule changes or Count people is
+  pressed. Saved segments are listed at `/segments/saved`.
+- **Activity log** (`/mobile/activity`): every event sent to the webhook or the simulator, newest first,
+  including duplicates and refused ones (with the reason). New ones appear as they arrive.
+- **Live updates**: a person's profile, the Activity log and the Events page show new app events within
+  about two seconds, without a reload. Anything that arrived in the last hour is green with a "New" label,
+  and goes back to normal when the hour is up, even if the page stays open.
+- **Light and dark mode**: the switch at the right of the top bar picks Light, Dark or the system
+  setting. It follows the system setting until you pick, and the browser remembers your choice.
 
 Not built yet: the login (step 6), the JSON API under `/api`, the engagement score, and merging a
 placeholder person into a real one when an unknown app user later shows up in an import.
@@ -104,14 +119,54 @@ Emails live only in `people` (and in `raw`, as written by the source). Every oth
 
 ## The webhook
 
-The mobile app sends one event per request:
+The mobile app sends one event per request to `POST /webhooks/app`, with an API key in the
+`Authorization` header.
 
-```bash
-curl -X POST http://localhost:3000/webhooks/app \
-  -H "Authorization: Bearer <an API key from /settings/api-keys>" \
-  -H "Content-Type: application/json" \
-  -d '{"event_id":"evt_9f3a1c","event":"read_story","user_id":"u_2b6447a3","device_id":"d_4b21e8","timestamp":"2026-09-28T14:22:05Z","properties":{"story":"supreme-court-ruling-explained"}}'
-```
+### Try it without a key
+
+**Mobile app → Events** (`/mobile`) has an event simulator. It sends the event through the same checks
+and the same ingest code as a real delivery; only the API key check is skipped, because you are
+already in the app.
+
+### Send a real request
+
+1. Open **Mobile app → API keys** (`/settings/api-keys`), name the key and press **Create key**.
+2. Copy the key straight away. Only a hash of it is stored, so it is shown once and never again.
+   Revoke it on the same page when you are done.
+3. Send an event from a device that has not logged in yet:
+
+   ```bash
+   curl -X POST http://localhost:3000/webhooks/app \
+     -H "Authorization: Bearer YOUR_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"event_id":"evt_test_1","event":"app_open","user_id":null,"device_id":"dev_test_1","timestamp":"2026-09-28T12:00:00Z"}'
+   ```
+
+4. Log in on the same device. The anonymous event from step 3 now belongs to `usr_test_1`:
+
+   ```bash
+   curl -X POST http://localhost:3000/webhooks/app \
+     -H "Authorization: Bearer YOUR_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"event_id":"evt_test_2","event":"login","user_id":"usr_test_1","device_id":"dev_test_1","timestamp":"2026-09-28T12:05:00Z"}'
+   ```
+
+   `usr_test_1` has never been seen before, so it gets its own profile on the People page.
+
+### The body
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `event_id` | Yes | Unique per event. Sending it again is safe |
+| `event` | Yes | `app_open`, `read_story`, `link_click` or `login` |
+| `device_id` | Yes | |
+| `timestamp` | Yes | ISO 8601 with a timezone, e.g. `2026-09-28T14:22:05Z` |
+| `user_id` | No | `null` or left out until the device logs in. Matched against every ID a person has (see below) |
+| `properties` | No | Any JSON object, e.g. `{"story":"supreme-court-ruling-explained"}` |
+
+A stored event answers `200` with `{"status":"accepted","event_id":"…","person_id":"…"}`.
+
+### What happens when
 
 | Situation | What happens |
 | --- | --- |
@@ -119,12 +174,25 @@ curl -X POST http://localhost:3000/webhooks/app \
 | Events out of order | Everything is ordered by `timestamp`, not arrival |
 | `user_id` is null | The event is kept, unattached |
 | The device later logs in | Its earlier anonymous events attach to that user's person |
+| `user_id` is any ID someone already has | The event goes to that person. Checked in this order: person ID (shown on the profile), app user ID, email, web visitor ID, device ID. Unless it was the person ID, the value is also saved as their app user ID |
 | `user_id` never seen before | A new person is created for it; the event is not dropped |
 | Missing or wrong key | 401 |
 | Bad shape | 400 with the fields that are wrong |
 | More than 600 requests a minute from one key | 429 |
+| Body over 64 KB | 413 |
 
-Every delivery from a valid key is also kept, as it arrived, in `raw.webhook_events`.
+Every delivery from a valid key is also kept, as it arrived, in `raw.webhook_events`, along with
+whether it came from the webhook or the simulator. That table is what the Activity log shows.
+
+### How live updates work
+
+Each open page asks a small endpoint every two seconds whether anything changed:
+`GET /api/mobile/v1/deliveries/marker` for the Activity log and Events page, and
+`GET /api/people/v1/:id/activity-marker` for a profile. Each answers with a short value that changes when
+an event arrives (one indexed query). Only when it changes does the page re-read its data from the server.
+Checks pause while the tab is in the background. This needs no long-lived connections, so it works the
+same on Vercel's serverless functions. "Green" is measured from when an event *arrived*, not its
+`timestamp`, since a device can send an old event late.
 
 The proof that order and repeats do not matter is `src/apps/mobile/ingest-event.test.ts`: one event
 history replayed in 100 shuffled orders, with duplicates, must always end in the same state.

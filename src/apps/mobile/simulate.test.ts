@@ -4,6 +4,7 @@ import type { Db } from "@/shared/db/client";
 import { createTestDb } from "@/shared/db/testing";
 
 import { listRecentEvents } from "./activity";
+import { rawWebhookEvents } from "./schema";
 import { buildSimulatedPayload, sendSimulatedEvent } from "./simulate";
 
 const NOW = new Date("2026-09-28T14:22:05Z");
@@ -49,7 +50,8 @@ describe("sendSimulatedEvent", () => {
       new Date("2026-09-28T14:25:00Z"),
     );
 
-    expect(anonymous).toEqual({ ok: true, status: "accepted", personId: null });
+    expect(anonymous).toMatchObject({ ok: true, status: "accepted", personId: null });
+    expect(anonymous.ok && anonymous.eventId).toMatch(/^evt_sim_/);
     expect(login).toMatchObject({ ok: true, status: "accepted" });
     const stored = await listRecentEvents(db);
     expect(stored).toHaveLength(2);
@@ -61,5 +63,18 @@ describe("sendSimulatedEvent", () => {
 
     expect(result.ok).toBe(false);
     expect(await listRecentEvents(db)).toHaveLength(0);
+  });
+
+  it("logs every event it sends as coming from the simulator, refused ones too", async () => {
+    await sendSimulatedEvent(db, INPUT, NOW);
+    await sendSimulatedEvent(db, { ...INPUT, deviceId: "" }, NOW);
+
+    const log = await db.select().from(rawWebhookEvents);
+
+    expect(log.map((row) => [row.source, row.outcome])).toEqual([
+      ["simulator", "accepted"],
+      ["simulator", "rejected"],
+    ]);
+    expect(log[1].reason).toMatch(/^device_id: /);
   });
 });

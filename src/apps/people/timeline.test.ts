@@ -70,12 +70,19 @@ describe("buildTimeline", () => {
   it("describes a visit and an app event", () => {
     const [event, visited] = buildTimeline([visit({ utmSource: "instagram" })], [appEvent()]);
 
-    expect(visited).toMatchObject({ source: "web", action: "Visited", subject: "/about", detail: "via instagram" });
+    expect(visited).toMatchObject({
+      source: "web",
+      action: "Visited",
+      subject: "/about",
+      detail: "via instagram",
+      arrivedAt: null,
+    });
     expect(event).toMatchObject({
       source: "app",
       action: "read_story",
       subject: "supreme-court-ruling-explained",
       detail: "device d_1",
+      arrivedAt: new Date("2026-09-03T00:00:00Z"),
     });
   });
 });

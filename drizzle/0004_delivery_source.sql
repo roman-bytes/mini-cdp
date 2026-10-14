@@ -1,0 +1,1 @@
+ALTER TABLE "raw"."webhook_events" ADD COLUMN "source" text DEFAULT 'webhook' NOT NULL;

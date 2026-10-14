@@ -6,9 +6,12 @@ import { ingestEvent } from "@/apps/mobile/ingest-event";
 import type { Db } from "@/shared/db/client";
 import { createTestDb } from "@/shared/db/testing";
 
+import { DEFAULT_SORT, PEOPLE_PAGE_SIZE } from "@/apps/people/directory";
+import type { PeopleParams } from "@/apps/people/people-params";
+
 import { compileRule } from "./compile";
 import type { SegmentDefinition, SegmentRule } from "./definition";
-import { countSegment, listSegmentMembers } from "./run";
+import { countSegment, listSegmentMembers, listSegmentPeople } from "./run";
 import { deleteSegment, getSegment, listSegments, saveSegment } from "./saved";
 
 const TODAY = "2026-09-28";
@@ -44,6 +47,45 @@ describe("segments, with the assessment files loaded", () => {
     expect(members).toHaveLength(229);
     expect(members.filter((member) => member.neverOpened)).toHaveLength(146);
     expect(members.every((member) => member.acquisitionSource === "instagram")).toBe(true);
+  });
+
+  describe("listSegmentPeople", () => {
+    const table = (overrides: Partial<PeopleParams> = {}): PeopleParams => ({
+      filters: {},
+      sort: DEFAULT_SORT,
+      page: 1,
+      pageSize: PEOPLE_PAGE_SIZE,
+      ...overrides,
+    });
+    const coldInstagram = all(INSTAGRAM, NOT_OPENED_IN_30_DAYS);
+
+    it("lists only the segment's people, one page at a time", async () => {
+      const page = await listSegmentPeople(db, coldInstagram, TODAY, table());
+
+      expect(page.total).toBe(229);
+      expect(page.people).toHaveLength(PEOPLE_PAGE_SIZE);
+      expect(page.people.every((person) => person.acquisitionSource === "instagram")).toBe(true);
+    });
+
+    it("narrows within the segment with the table's filters", async () => {
+      const neverOpened = await listSegmentPeople(db, coldInstagram, TODAY, table({ filters: { engagement: "never" } }));
+      const active = await listSegmentPeople(db, coldInstagram, TODAY, table({ filters: { status: "active" } }));
+
+      expect(neverOpened.total).toBe(146);
+      expect(active.total).toBe(174);
+    });
+
+    it("searches only inside the segment", async () => {
+      const outside = await listSegmentPeople(db, coldInstagram, TODAY, table({ filters: { query: "julia.evans230" } }));
+
+      expect(outside.total).toBe(0);
+    });
+
+    it("sorts the segment's people", async () => {
+      const page = await listSegmentPeople(db, coldInstagram, TODAY, table({ sort: { column: "signup_date", direction: "desc" } }));
+
+      expect(page.people[0].signupDate! >= page.people.at(-1)!.signupDate!).toBe(true);
+    });
   });
 
   it("covers all statuses by default, and narrows when a status rule is added", async () => {

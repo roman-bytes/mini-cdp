@@ -10,6 +10,15 @@ export function isActivePath(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/**
+ * The sidebar link a page belongs to: the most specific one that matches, so
+ * /segments/saved/123 belongs to "Saved segments", not to "Segments".
+ */
+export function activeHref(pathname: string, hrefs: string[]): string | null {
+  const matching = hrefs.filter((href) => isActivePath(pathname, href));
+  return matching.sort((a, b) => b.length - a.length)[0] ?? null;
+}
+
 type SidebarNavLinkProps = {
   href: string;
   /** Shown as a tooltip when the sidebar is collapsed to icons. */
@@ -18,8 +27,8 @@ type SidebarNavLinkProps = {
 };
 
 /** A sidebar link that marks itself when it is the current page. */
-export function SidebarNavLink({ href, label, children }: SidebarNavLinkProps) {
-  const isActive = isActivePath(usePathname(), href);
+export function SidebarNavLink({ href, label, allHrefs, children }: SidebarNavLinkProps & { allHrefs: string[] }) {
+  const isActive = activeHref(usePathname(), allHrefs) === href;
 
   return (
     <SidebarMenuButton

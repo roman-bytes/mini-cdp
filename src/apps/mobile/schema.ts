@@ -61,10 +61,15 @@ export const events = mobileSchema.table(
 export const DELIVERY_OUTCOMES = ["accepted", "duplicate", "rejected"] as const;
 export type DeliveryOutcome = (typeof DELIVERY_OUTCOMES)[number];
 
+/** Where a delivery came from: the real webhook, or the event simulator in the app. */
+export const DELIVERY_SOURCES = ["webhook", "simulator"] as const;
+export type DeliverySource = (typeof DELIVERY_SOURCES)[number];
+
 /** Every webhook delivery exactly as it arrived, including ones that were refused. */
 export const rawWebhookEvents = rawSchema.table("webhook_events", {
   id: serial("id").primaryKey(),
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  source: text("source", { enum: DELIVERY_SOURCES }).notNull().default("webhook"),
   outcome: text("outcome", { enum: DELIVERY_OUTCOMES }).notNull(),
   reason: text("reason"),
   body: text("body").notNull(),

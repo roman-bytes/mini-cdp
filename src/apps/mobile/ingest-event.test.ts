@@ -1,16 +1,16 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, count, eq, sql } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { importAppUsers } from "@/apps/mobile/import-app-users";
 import { importSubscribers } from "@/apps/newsletter/import-subscribers";
-import { findPersonByIdentifier } from "@/apps/people/identifiers";
-import { identifiers, people } from "@/apps/people/schema";
+import { findOrCreatePerson, findPersonByIdentifier, linkIdentifiers } from "@/apps/people/identifiers";
+import { IDENTIFIER_TYPES, identifiers, people } from "@/apps/people/schema";
 import { getProfile } from "@/apps/people/directory";
 import type { Db } from "@/shared/db/client";
 import { createTestDb } from "@/shared/db/testing";
 
 import { listEventsForPerson, listRecentEvents } from "./activity";
-import { ingestEvent } from "./ingest-event";
+import { ingestEvent, USER_ID_LOOKUP_ORDER } from "./ingest-event";
 import { events } from "./schema";
 import type { IncomingEvent } from "./webhook-payload";
 
@@ -107,6 +107,72 @@ describe("ingestEvent", () => {
 
     expect(profile).toMatchObject({ kind: "unknown", email: null, appEventCount: 1 });
     expect(await findPersonByIdentifier(db, "user_id", "u_never_seen")).toBe(result.personId);
+  });
+
+  async function countPeople(): Promise<number> {
+    const [row] = await db.select({ total: count() }).from(people);
+    return row.total;
+  }
+
+  it("attaches a user ID that is someone's email to that person, whatever its case", async () => {
+    const before = await countPeople();
+    const result = await ingestEvent(db, event("e1", 1, { userId: "Known@Example.com" }));
+
+    expect(result.personId).toBe(knownPerson);
+    expect(await countPeople()).toBe(before);
+    expect(await findPersonByIdentifier(db, "user_id", "Known@Example.com")).toBe(knownPerson);
+  });
+
+  it("attaches a user ID that is someone's web visitor ID to that person, with the device's earlier events", async () => {
+    await linkIdentifiers(db, [{ personId: knownPerson, type: "visitor_id", value: "v_known" }], "web");
+    const before = await countPeople();
+
+    await ingestEvent(db, event("e1", 1));
+    await ingestEvent(db, event("e2", 2, { event: "login", userId: "v_known" }));
+
+    expect(await snapshot(db)).toEqual({ e1: knownPerson, e2: knownPerson });
+    expect(await countPeople()).toBe(before);
+    expect(await findPersonByIdentifier(db, "user_id", "v_known")).toBe(knownPerson);
+  });
+
+  it("attaches a user ID that is a person ID to that person, without saving it as an app user ID", async () => {
+    const before = await countPeople();
+
+    const result = await ingestEvent(db, event("e1", 1, { userId: knownPerson.toUpperCase() }));
+
+    expect(result.personId).toBe(knownPerson);
+    expect(await countPeople()).toBe(before);
+    expect(await findPersonByIdentifier(db, "user_id", knownPerson.toUpperCase())).toBeNull();
+  });
+
+  it("goes by the person ID even when another person has it as an app user ID", async () => {
+    const other = await findOrCreatePerson(db, "user_id", knownPerson, "mobile");
+
+    const result = await ingestEvent(db, event("e1", 1, { userId: knownPerson }));
+
+    expect(result.personId).toBe(knownPerson);
+    expect(result.personId).not.toBe(other);
+  });
+
+  it("attaches a user ID that is a device ID linked to someone to that person", async () => {
+    await linkIdentifiers(db, [{ personId: knownPerson, type: "device_id", value: "d_phone" }], "mobile");
+
+    const result = await ingestEvent(db, event("e1", 1, { deviceId: "d_other", userId: "d_phone" }));
+
+    expect(result.personId).toBe(knownPerson);
+  });
+
+  it("looks the user ID up as every kind of ID a person can have", () => {
+    expect([...USER_ID_LOOKUP_ORDER].sort()).toEqual([...IDENTIFIER_TYPES].sort());
+  });
+
+  it("prefers the app's own user ID when another person has the same value as a visitor ID", async () => {
+    const visitor = await findOrCreatePerson(db, "visitor_id", "u_known", "web");
+
+    const result = await ingestEvent(db, event("e1", 1, { userId: "u_known" }));
+
+    expect(result.personId).toBe(knownPerson);
+    expect(result.personId).not.toBe(visitor);
   });
 
   it("keeps devices apart", async () => {

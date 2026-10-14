@@ -4,7 +4,7 @@ import { importSubscribers } from "@/apps/newsletter/import-subscribers";
 import type { Db } from "@/shared/db/client";
 import { createTestDb } from "@/shared/db/testing";
 
-import { PREVIEW_MEMBER_LIMIT, previewSegment, saveCheckedSegment } from "./preview";
+import { previewSegment, saveCheckedSegment } from "./preview";
 import { getSegment } from "./saved";
 
 const TODAY = "2026-09-28";
@@ -25,14 +25,8 @@ describe("the segment builder's server side", () => {
     await importSubscribers(db, rows);
   });
 
-  it("previews with an exact count and a capped list of people", async () => {
-    const preview = await previewSegment(db, INSTAGRAM, TODAY);
-
-    expect(preview).toMatchObject({ ok: true, size: { total: 30, neverOpened: 10 } });
-    if (preview.ok) {
-      expect(preview.members).toHaveLength(PREVIEW_MEMBER_LIMIT);
-      expect(preview.members[0]).toMatchObject({ email: "person00@example.com", neverOpened: true });
-    }
+  it("previews with an exact count, and how many never opened", async () => {
+    expect(await previewSegment(db, INSTAGRAM, TODAY)).toEqual({ ok: true, size: { total: 30, neverOpened: 10 } });
   });
 
   it("returns the problems instead of running bad rules", async () => {

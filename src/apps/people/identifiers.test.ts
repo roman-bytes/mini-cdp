@@ -8,6 +8,8 @@ import {
   findOrCreatePeopleByIdentifiers,
   findOrCreatePerson,
   findPeopleByIdentifiers,
+  findPersonByAnyIdentifier,
+  findPersonById,
   findPersonByIdentifier,
   linkIdentifiers,
   normalizeIdentifier,
@@ -162,5 +164,50 @@ describe("people identifiers", () => {
 
       expect(second).toBe(first);
     });
+  });
+});
+
+describe("findPersonByAnyIdentifier", () => {
+  let db: Db;
+
+  beforeEach(async () => {
+    db = await createTestDb();
+  });
+
+  it("finds the owner under whichever kind of identifier has the value", async () => {
+    const person = await findOrCreatePerson(db, "email", "julia@example.com", "newsletter");
+
+    expect(await findPersonByAnyIdentifier(db, ["user_id", "email"], " Julia@Example.com ")).toBe(person);
+  });
+
+  it("tries the kinds in the order given", async () => {
+    const visitor = await findOrCreatePerson(db, "visitor_id", "x_1", "web");
+    const appUser = await findOrCreatePerson(db, "user_id", "x_1", "mobile");
+
+    expect(await findPersonByAnyIdentifier(db, ["user_id", "visitor_id"], "x_1")).toBe(appUser);
+    expect(await findPersonByAnyIdentifier(db, ["visitor_id", "user_id"], "x_1")).toBe(visitor);
+  });
+
+  it("returns null when nobody has the value as any of the kinds", async () => {
+    await findOrCreatePerson(db, "device_id", "d_1", "mobile");
+
+    expect(await findPersonByAnyIdentifier(db, ["user_id", "email", "visitor_id"], "d_1")).toBeNull();
+  });
+});
+
+describe("findPersonById", () => {
+  it("finds a person by their person ID, whatever its case or spacing", async () => {
+    const db = await createTestDb();
+    const person = await findOrCreatePerson(db, "email", "julia@example.com", "newsletter");
+
+    expect(await findPersonById(db, person)).toBe(person);
+    expect(await findPersonById(db, ` ${person.toUpperCase()} `)).toBe(person);
+  });
+
+  it("returns null for a value that is not a person ID", async () => {
+    const db = await createTestDb();
+
+    expect(await findPersonById(db, "u_1")).toBeNull();
+    expect(await findPersonById(db, "3f6972bf-3046-4a1b-a662-47e26413d514")).toBeNull();
   });
 });

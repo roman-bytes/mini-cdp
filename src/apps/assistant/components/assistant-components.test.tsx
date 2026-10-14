@@ -100,7 +100,7 @@ describe("answer parts", () => {
   it("links to a saved segment and gives its size", () => {
     render(<AnswerSegment segment={{ kind: "segment", segmentId: "s1", name: "Engaged", total: 1234, neverOpened: 0 }} />);
 
-    expect(screen.getByRole("link", { name: "Engaged" })).toHaveAttribute("href", "/segments/s1");
+    expect(screen.getByRole("link", { name: "Engaged" })).toHaveAttribute("href", "/segments/saved/s1");
     expect(screen.getByText(/1,234 people\./)).toBeInTheDocument();
   });
 

@@ -2,9 +2,12 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { fixClockAt } from "@/shared/fixed-clock";
+
 import type { Profile } from "../directory";
 import type { TimelineEntry } from "../timeline";
 import { PeopleTable } from "./people-table";
+import { PersonHeader } from "./person-header";
 import { personName } from "./person-labels";
 import { AppCard, daysAgo, IdentityTable, NewsletterCard, WebCard } from "./profile-cards";
 import { TimelineFilter, TimelineTable } from "./timeline-table";
@@ -150,14 +153,45 @@ describe("IdentityTable", () => {
   });
 });
 
+describe("PersonHeader", () => {
+  it("shows the name, the kind and the person ID with a way to copy it", () => {
+    render(<PersonHeader profile={profile()} />);
+
+    expect(screen.getByRole("heading", { name: "julia.evans230@gmail.com" })).toBeInTheDocument();
+    expect(screen.getByText("Subscriber")).toBeInTheDocument();
+    expect(screen.getByText("3f6972bf-3046-4a1b-a662-47e26413d514")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy person ID" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "← People" })).toHaveAttribute("href", "/people");
+  });
+});
+
 describe("timeline", () => {
+  /** The page was drawn at 15:00; the app event arrived 20 minutes before. */
+  const RENDERED_AT = new Date("2026-09-28T15:00:00Z").getTime();
+  fixClockAt(RENDERED_AT);
   const entries: TimelineEntry[] = [
-    { key: "app-1", source: "app", at: new Date("2026-09-28T14:22:05Z"), action: "read_story", subject: "ai-regulation-bill", detail: "device d_1" },
-    { key: "web-1", source: "web", at: new Date("2026-09-13T10:00:00Z"), action: "Visited", subject: "/subscribe", detail: "via instagram" },
+    {
+      key: "app-1",
+      source: "app",
+      at: new Date("2026-09-28T14:22:05Z"),
+      action: "read_story",
+      subject: "ai-regulation-bill",
+      detail: "device d_1",
+      arrivedAt: new Date("2026-09-28T14:40:00Z"),
+    },
+    {
+      key: "web-1",
+      source: "web",
+      at: new Date("2026-09-13T10:00:00Z"),
+      action: "Visited",
+      subject: "/subscribe",
+      detail: "via instagram",
+      arrivedAt: null,
+    },
   ];
 
   it("shows each entry with its time, source and detail", () => {
-    render(<TimelineTable entries={entries} />);
+    render(<TimelineTable entries={entries} renderedAt={RENDERED_AT} />);
 
     const row = screen.getByText("/subscribe").closest("tr")!;
     expect(within(row).getByText("Sep 13, 2026, 10:00 UTC")).toBeInTheDocument();
@@ -166,8 +200,15 @@ describe("timeline", () => {
     expect(screen.getByText("ai-regulation-bill")).toBeInTheDocument();
   });
 
+  it("highlights an app event that arrived in the last hour, but not an imported visit", () => {
+    render(<TimelineTable entries={entries} renderedAt={RENDERED_AT} />);
+
+    expect(screen.getByText("ai-regulation-bill").closest("tr")).toHaveAttribute("data-recent", "true");
+    expect(screen.getByText("/subscribe").closest("tr")).not.toHaveAttribute("data-recent");
+  });
+
   it("says when there is no activity", () => {
-    render(<TimelineTable entries={[]} />);
+    render(<TimelineTable entries={[]} renderedAt={RENDERED_AT} />);
 
     expect(screen.getByText("No activity to show.")).toBeInTheDocument();
   });

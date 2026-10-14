@@ -5,55 +5,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { EXAMPLE_DEFINITION, SEGMENT_FIELDS, type SegmentDefinition } from "../definition";
 import type { SaveResult, SegmentPreview } from "../preview";
-import type { SegmentMember } from "../run";
-import { MembersTable, SegmentSizeLine } from "./members-table";
+import { SegmentSizeLine } from "./segment-size-line";
 import { SegmentBuilder } from "./segment-builder";
 
-function member(overrides: Partial<SegmentMember> = {}): SegmentMember {
-  return {
-    personId: "3f6972bf-3046-4a1b-a662-47e26413d514",
-    email: "cold@example.com",
-    kind: "subscriber",
-    status: "active",
-    acquisitionSource: "instagram",
-    signupDate: "2026-08-01",
-    lastOpenDate: null,
-    hasAppAccount: false,
-    appAccountCreatedOn: null,
-    webVisitCount: 0,
-    firstVisitAt: null,
-    lastVisitAt: null,
-    appEventCount: 0,
-    lastAppEventAt: null,
-    neverOpened: true,
-    ...overrides,
-  };
-}
-
-describe("MembersTable", () => {
-  it("tags people who never opened and links to their profile", () => {
-    render(<MembersTable members={[member()]} />);
-
-    expect(screen.getByText("Never opened")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "cold@example.com" })).toHaveAttribute(
-      "href",
-      "/people/3f6972bf-3046-4a1b-a662-47e26413d514",
-    );
-  });
-
-  it("shows the last open date for people who have opened", () => {
-    render(<MembersTable members={[member({ lastOpenDate: "2026-08-10", neverOpened: false })]} />);
-
-    expect(screen.getByText("Aug 10, 2026")).toBeInTheDocument();
-    expect(screen.queryByText("Never opened")).not.toBeInTheDocument();
-  });
-
-  it("says so when nobody matches", () => {
-    render(<MembersTable members={[]} />);
-
-    expect(screen.getByText("Nobody matches these rules.")).toBeInTheDocument();
-  });
-});
 
 describe("SegmentSizeLine", () => {
   it("shows the total and how many never opened", () => {
@@ -72,7 +26,7 @@ describe("SegmentSizeLine", () => {
 });
 
 describe("SegmentBuilder", () => {
-  const goodPreview: SegmentPreview = { ok: true, size: { total: 229, neverOpened: 146 }, members: [member()] };
+  const goodPreview: SegmentPreview = { ok: true, size: { total: 229, neverOpened: 146 } };
 
   function renderBuilder(options: { preview?: SegmentPreview; saveResult?: SaveResult } = {}) {
     const preview = vi
@@ -85,17 +39,25 @@ describe("SegmentBuilder", () => {
     return { preview, save, user: userEvent.setup() };
   }
 
-  it("previews the starting rules straight away and shows the count", async () => {
+  it("runs no query when the page opens", () => {
     const { preview } = renderBuilder();
+
+    expect(preview).not.toHaveBeenCalled();
+    expect(screen.getByText(/Change a rule, or press Count people/)).toBeInTheDocument();
+  });
+
+  it("counts the starting rules when Count people is pressed", async () => {
+    const { preview, user } = renderBuilder();
+
+    await user.click(screen.getByRole("button", { name: "Count people" }));
 
     expect(await screen.findByText("229")).toBeInTheDocument();
     expect(screen.getByText(/146 never opened/)).toBeInTheDocument();
     expect(preview).toHaveBeenCalledWith(EXAMPLE_DEFINITION);
   });
 
-  it("previews again when a rule's value changes", async () => {
+  it("counts again when a rule's value changes", async () => {
     const { preview, user } = renderBuilder();
-    await screen.findByText("229");
 
     await user.selectOptions(screen.getByLabelText("Rule 1 value"), "facebook");
 
@@ -105,11 +67,11 @@ describe("SegmentBuilder", () => {
         rules: [{ field: "source", op: "is", value: "facebook" }, EXAMPLE_DEFINITION.rules[1]],
       }),
     );
+    expect(await screen.findByText("229")).toBeInTheDocument();
   });
 
   it("resets a rule to a valid default when its field changes", async () => {
     const { preview, user } = renderBuilder();
-    await screen.findByText("229");
 
     await user.selectOptions(screen.getByLabelText("Rule 2 field"), "app_account");
 
@@ -124,7 +86,6 @@ describe("SegmentBuilder", () => {
 
   it("adds and removes rules, and switches between all and any", async () => {
     const { preview, user } = renderBuilder();
-    await screen.findByText("229");
 
     await user.click(screen.getByRole("button", { name: "Add rule" }));
     expect(screen.getByLabelText("Rule 3 field")).toBeInTheDocument();
@@ -140,7 +101,6 @@ describe("SegmentBuilder", () => {
 
   it("says the segment matches everyone when the last rule is removed", async () => {
     const { user } = renderBuilder();
-    await screen.findByText("229");
 
     await user.click(screen.getByRole("button", { name: "Remove rule 2" }));
     await user.click(screen.getByRole("button", { name: "Remove rule 1" }));
@@ -149,14 +109,15 @@ describe("SegmentBuilder", () => {
   });
 
   it("shows the server's errors instead of a count", async () => {
-    renderBuilder({ preview: { ok: false, errors: ["Signup date needs a YYYY-MM-DD date"] } });
+    const { user } = renderBuilder({ preview: { ok: false, errors: ["Signup date needs a YYYY-MM-DD date"] } });
+
+    await user.click(screen.getByRole("button", { name: "Count people" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Signup date needs a YYYY-MM-DD date");
   });
 
   it("saves the current rules under the typed name", async () => {
     const { save, user } = renderBuilder();
-    await screen.findByText("229");
 
     await user.type(screen.getByLabelText("Segment name"), "Cold Instagram");
     await user.click(screen.getByRole("button", { name: "Save segment" }));
@@ -166,16 +127,18 @@ describe("SegmentBuilder", () => {
 
   it("shows why a save was refused", async () => {
     const { user } = renderBuilder({ saveResult: { ok: false, errors: ["Give the segment a name"] } });
-    await screen.findByText("229");
 
     await user.click(screen.getByRole("button", { name: "Save segment" }));
 
     expect(await screen.findByText("Give the segment a name")).toBeInTheDocument();
   });
 
-  it("notes when the list is only a sample", async () => {
-    renderBuilder();
+  it("shows the count only, and points to saving for the list of people", async () => {
+    const { user } = renderBuilder();
 
-    expect(await screen.findByText(/Showing the first 1\./)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Count people" }));
+
+    expect(await screen.findByText("Save the segment to see who is in it and export the list.")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 });

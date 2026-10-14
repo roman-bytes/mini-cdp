@@ -2,9 +2,9 @@ import { readBearerToken, verifyApiKey } from "@/shared/auth/api-keys";
 import { consumeRateLimit, type RateLimit } from "@/shared/auth/rate-limit";
 import type { Db } from "@/shared/db/client";
 
-import { ingestEvent } from "./ingest-event";
-import { rawWebhookEvents, type DeliveryOutcome } from "./schema";
-import { parseWebhookPayload } from "./webhook-payload";
+import { ingestEvent, type IngestResult } from "./ingest-event";
+import { rawWebhookEvents, type DeliveryOutcome, type DeliverySource } from "./schema";
+import { parseWebhookPayload, type PayloadCheck } from "./webhook-payload";
 
 /** The largest request body the webhook reads. A real event is far smaller. */
 export const MAX_BODY_BYTES = 64 * 1024;
@@ -24,6 +24,11 @@ export type WebhookReply = {
   body: Record<string, unknown>;
 };
 
+/** What became of one event body: stored (or already stored), or refused and why. */
+export type ReceiveResult =
+  | ({ ok: true; eventId: string } & IngestResult)
+  | { ok: false; errors: string[] };
+
 function reply(status: number, body: Record<string, unknown>): WebhookReply {
   return { status, body };
 }
@@ -37,21 +42,40 @@ function decodeJson(text: string): { ok: true; value: unknown } | { ok: false } 
   }
 }
 
-/** Keeps a copy of the delivery and what was done with it. */
-async function recordDelivery(
-  db: Db,
-  outcome: DeliveryOutcome,
-  reason: string | null,
-  body: string,
-): Promise<void> {
-  await db
-    .insert(rawWebhookEvents)
-    .values({ outcome, reason, body: body.slice(0, MAX_BODY_BYTES) });
+/** Checks a body as it arrived: it must be JSON, and an event the app understands. */
+function checkEventBody(body: string): PayloadCheck {
+  const decoded = decodeJson(body);
+  if (!decoded.ok) return { ok: false, errors: ["body: not valid JSON"] };
+  return parseWebhookPayload(decoded.value);
 }
 
-async function rejectDelivery(db: Db, delivery: WebhookDelivery, errors: string[]): Promise<WebhookReply> {
-  await recordDelivery(db, "rejected", errors.join("; "), delivery.body);
-  return reply(400, { error: "Invalid event", details: errors });
+type DeliveryRecord = {
+  source: DeliverySource;
+  outcome: DeliveryOutcome;
+  reason: string | null;
+  body: string;
+};
+
+/** Keeps a copy of the delivery and what was done with it. */
+async function recordDelivery(db: Db, record: DeliveryRecord): Promise<void> {
+  await db.insert(rawWebhookEvents).values({ ...record, body: record.body.slice(0, MAX_BODY_BYTES) });
+}
+
+/**
+ * Takes in one event body, whichever way it arrived: checks it, stores the
+ * event, and keeps a copy of the body in the delivery log with what was done
+ * with it. The webhook and the event simulator both come through here.
+ */
+export async function receiveEvent(db: Db, body: string, source: DeliverySource): Promise<ReceiveResult> {
+  const check = checkEventBody(body);
+  if (!check.ok) {
+    await recordDelivery(db, { source, outcome: "rejected", reason: check.errors.join("; "), body });
+    return check;
+  }
+
+  const result = await ingestEvent(db, check.event);
+  await recordDelivery(db, { source, outcome: result.status, reason: null, body });
+  return { ok: true, eventId: check.event.id, ...result };
 }
 
 /**
@@ -73,17 +97,7 @@ export async function handleWebhookDelivery(
     return reply(413, { error: "Request body is too large" });
   }
 
-  const decoded = decodeJson(delivery.body);
-  if (!decoded.ok) return rejectDelivery(db, delivery, ["body: not valid JSON"]);
-
-  const check = parseWebhookPayload(decoded.value);
-  if (!check.ok) return rejectDelivery(db, delivery, check.errors);
-
-  const result = await ingestEvent(db, check.event);
-  await recordDelivery(db, result.status, null, delivery.body);
-  return reply(200, {
-    status: result.status,
-    event_id: check.event.id,
-    person_id: result.personId,
-  });
+  const result = await receiveEvent(db, delivery.body, "webhook");
+  if (!result.ok) return reply(400, { error: "Invalid event", details: result.errors });
+  return reply(200, { status: result.status, event_id: result.eventId, person_id: result.personId });
 }

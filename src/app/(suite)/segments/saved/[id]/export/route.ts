@@ -4,8 +4,8 @@ import { getSegment } from "@/apps/segments/saved";
 import { getLiveDb } from "@/shared/db/live";
 import { getToday } from "@/shared/today";
 
-/** GET /segments/:id/export — everyone in the segment right now, as a CSV download. */
-export async function GET(_request: Request, context: RouteContext<"/segments/[id]/export">) {
+/** GET /segments/saved/:id/export — everyone in the segment right now, as a CSV download. */
+export async function GET(_request: Request, context: RouteContext<"/segments/saved/[id]/export">) {
   const { id } = await context.params;
   const db = await getLiveDb();
   const segment = await getSegment(db, id);

@@ -1,7 +1,13 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
-import { findOrCreatePerson, linkIdentifiers } from "@/apps/people/identifiers";
+import {
+  findOrCreatePerson,
+  findPersonByAnyIdentifier,
+  findPersonById,
+  linkIdentifiers,
+} from "@/apps/people/identifiers";
+import type { IdentifierType } from "@/apps/people/schema";
 import type { Db } from "@/shared/db/client";
 
 import { events } from "./schema";
@@ -23,13 +29,38 @@ async function lockDevice(db: Db, deviceId: string): Promise<void> {
 }
 
 /**
- * The person behind a logged-in event. A user ID nobody has seen before gets
- * a new person rather than being dropped. The device is linked to that person
- * too, so a lookup by device ID finds them.
+ * What an event's user ID is looked up as when it is not a person ID, in
+ * order: every kind of ID a person can have. The app's own user IDs come
+ * first. An app may also send the person's email, their web visitor ID or a
+ * device ID as the user ID, and any of those points at the person who
+ * already has it.
+ */
+export const USER_ID_LOOKUP_ORDER: IdentifierType[] = ["user_id", "email", "visitor_id", "device_id"];
+
+/**
+ * Who an event's user ID belongs to. A person ID (the ID shown on a profile)
+ * is that person. Otherwise the user ID is looked up as USER_ID_LOOKUP_ORDER
+ * says, and saved as the person's app user ID, so the next event finds them
+ * directly. A user ID nobody has gets a new person, so the event is not
+ * dropped.
+ */
+async function findOwnerOfUserId(db: Db, userId: string): Promise<string> {
+  const byPersonId = await findPersonById(db, userId);
+  if (byPersonId) return byPersonId;
+
+  const known = await findPersonByAnyIdentifier(db, USER_ID_LOOKUP_ORDER, userId);
+  if (!known) return findOrCreatePerson(db, "user_id", userId, "mobile");
+  await linkIdentifiers(db, [{ personId: known, type: "user_id", value: userId }], "mobile");
+  return known;
+}
+
+/**
+ * The person behind a logged-in event, or null for an anonymous one. The
+ * device is linked to that person too, so a lookup by device ID finds them.
  */
 async function resolvePerson(db: Db, event: IncomingEvent): Promise<string | null> {
   if (!event.userId) return null;
-  const personId = await findOrCreatePerson(db, "user_id", event.userId, "mobile");
+  const personId = await findOwnerOfUserId(db, event.userId);
   await linkIdentifiers(db, [{ personId, type: "device_id", value: event.deviceId }], "mobile");
   return personId;
 }

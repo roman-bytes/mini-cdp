@@ -137,3 +137,13 @@ export async function getReach(db: Db): Promise<ReachRow[]> {
     .groupBy(onWeb, profiles.hasAppAccount);
   return toReachRows(groups);
 }
+
+/** Everything the Home page draws, read in one go. */
+export async function getOverview(db: Db, today: string) {
+  return {
+    stats: await getHeadlineStats(db, today),
+    weeks: await getWeeklySignups(db, today),
+    sources: await getEngagementBySource(db, today),
+    reach: await getReach(db),
+  };
+}

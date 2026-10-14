@@ -2,45 +2,47 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
-import { MembersTable, SegmentSizeLine } from "@/apps/segments/components/members-table";
+import { PeopleDirectory } from "@/apps/people/components/people-directory";
+import { parsePeopleParams } from "@/apps/people/people-params";
+import { SegmentSizeLine } from "@/apps/segments/components/segment-size-line";
 import { describeRule } from "@/apps/segments/definition";
-import { countSegment, listSegmentMembers } from "@/apps/segments/run";
+import { SAVED_SEGMENTS_PATH, segmentExportPath, segmentPath } from "@/apps/segments/paths";
+import { countSegment, listSegmentPeople } from "@/apps/segments/run";
 import { getSegment } from "@/apps/segments/saved";
 import { LoadingMessage } from "@/components/loading-message";
 import { Section } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { getLiveDb } from "@/shared/db/live";
+import { formatNumber } from "@/shared/format";
 import { getToday } from "@/shared/today";
 
-import { deleteSegmentAction } from "../actions";
+import { deleteSegmentAction } from "../../actions";
 
-/** How many people the page lists. The CSV export always has everyone. */
-const MEMBER_LIMIT = 500;
-
-async function SegmentDetail({ params }: Pick<PageProps<"/segments/[id]">, "params">) {
+async function SegmentDetail({ params, searchParams }: PageProps<"/segments/saved/[id]">) {
   const { id } = await params;
+  const tableParams = parsePeopleParams(await searchParams);
   const db = await getLiveDb();
   const segment = await getSegment(db, id);
   if (!segment) notFound();
 
   const today = getToday();
   const size = await countSegment(db, segment.definition, today);
-  const members = await listSegmentMembers(db, segment.definition, today, MEMBER_LIMIT);
+  const people = await listSegmentPeople(db, segment.definition, today, tableParams);
 
   return (
     <div className="space-y-8">
       <header className="space-y-2">
-        <Link href="/segments" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Segments
+        <Link href={SAVED_SEGMENTS_PATH} className="text-sm text-muted-foreground hover:text-foreground">
+          ← Saved segments
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="font-heading text-2xl font-semibold tracking-tight">{segment.name}</h1>
           <div className="flex gap-2">
             <a
               className="rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-secondary"
-              href={`/segments/${segment.id}/export`}
+              href={segmentExportPath(segment.id)}
             >
-              Export CSV
+              Export all {formatNumber(size.total)} as CSV
             </a>
             <form action={deleteSegmentAction}>
               <input type="hidden" name="id" value={segment.id} />
@@ -50,6 +52,7 @@ async function SegmentDetail({ params }: Pick<PageProps<"/segments/[id]">, "para
             </form>
           </div>
         </div>
+        <SegmentSizeLine total={size.total} neverOpened={size.neverOpened} />
       </header>
 
       <Section title={segment.definition.match === "all" ? "Matches all of" : "Matches any of"}>
@@ -64,23 +67,23 @@ async function SegmentDetail({ params }: Pick<PageProps<"/segments/[id]">, "para
         )}
       </Section>
 
-      <Section title="People">
-        <SegmentSizeLine total={size.total} neverOpened={size.neverOpened} />
-        <MembersTable members={members} />
-        {size.total > members.length ? (
-          <p className="text-sm text-muted-foreground">
-            Showing the first {members.length}. Export the CSV for everyone.
-          </p>
-        ) : null}
+      <Section title="People in this segment">
+        <PeopleDirectory
+          params={tableParams}
+          result={people}
+          basePath={segmentPath(segment.id)}
+          searchLabel="Search this segment"
+          scope={{ total: size.total, name: "this segment" }}
+        />
       </Section>
     </div>
   );
 }
 
-export default function SegmentPage({ params }: PageProps<"/segments/[id]">) {
+export default function SegmentPage(props: PageProps<"/segments/saved/[id]">) {
   return (
     <Suspense fallback={<LoadingMessage />}>
-      <SegmentDetail params={params} />
+      <SegmentDetail {...props} />
     </Suspense>
   );
 }

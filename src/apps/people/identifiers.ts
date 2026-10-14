@@ -6,6 +6,7 @@ import { chunk, unique } from "@/shared/collections";
 import { INSERT_BATCH_SIZE, insertInChunks } from "@/shared/db/bulk";
 import type { Db } from "@/shared/db/client";
 import { normalizeEmail } from "@/shared/email";
+import { isUuid } from "@/shared/ids";
 
 import { identifiers, people, type IdentifierSource, type IdentifierType } from "./schema";
 
@@ -156,6 +157,33 @@ export async function findPersonByIdentifier(
 ): Promise<string | null> {
   const found = await findPeopleByIdentifiers(db, type, [value]);
   return found.get(normalizeIdentifier(type, value)) ?? null;
+}
+
+/**
+ * The person whose person ID this is, in its stored form, or null when the
+ * value is not a person ID. Case and surrounding spaces do not matter.
+ */
+export async function findPersonById(db: Db, value: string): Promise<string | null> {
+  const personId = value.trim().toLowerCase();
+  if (!isUuid(personId)) return null;
+  const [row] = await db.select({ id: people.id }).from(people).where(eq(people.id, personId));
+  return row?.id ?? null;
+}
+
+/**
+ * Finds the person who owns a value as any of the given kinds of identifier,
+ * trying the kinds in the order given. Null if nobody owns it as any of them.
+ */
+export async function findPersonByAnyIdentifier(
+  db: Db,
+  types: IdentifierType[],
+  value: string,
+): Promise<string | null> {
+  for (const type of types) {
+    const personId = await findPersonByIdentifier(db, type, value);
+    if (personId) return personId;
+  }
+  return null;
 }
 
 /** Finds the person behind one identifier, creating them if they are new. */

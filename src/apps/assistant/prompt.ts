@@ -1,4 +1,6 @@
+import { ENGAGED_WINDOW_DAYS } from "@/apps/people/dashboard";
 import { SEGMENT_FIELDS } from "@/apps/segments/definition";
+import { daysBefore } from "@/shared/dates-math";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -10,6 +12,13 @@ export function previousMonthName(today: string): string {
   const year = Number(today.slice(0, 4));
   const month = Number(today.slice(5, 7)); // 1-12
   return month === 1 ? `December ${year - 1}` : `${MONTH_NAMES.at(month - 2)} ${year}`;
+}
+
+/** The first and last day of the calendar month before the one `today` is in. */
+export function previousMonthRange(today: string): { start: string; end: string } {
+  const firstOfThisMonth = `${today.slice(0, 8)}01`;
+  const end = daysBefore(firstOfThisMonth, 1);
+  return { start: `${end.slice(0, 8)}01`, end };
 }
 
 /** The segment rule catalog, one line per field, for the model to build rules from. */
@@ -29,9 +38,13 @@ export function describeSegmentCatalog(): string {
  * PII-free "ai" views; the real tables are never mentioned.
  */
 export function buildSystemPrompt(today: string): string {
+  // Dates are worked out here, not left to the model, so the answers match
+  // the segment builder exactly.
+  const engagedSince = daysBefore(today, ENGAGED_WINDOW_DAYS);
+  const lastMonth = previousMonthRange(today);
   return `You are the data assistant inside a customer data platform for a newsletter company. A Growth teammate who does not write SQL asks questions in plain English. Use the tools to get every number; never guess or estimate one.
 
-Today is ${today}. "Last month" means the previous calendar month (${previousMonthName(today)}). Work out dates relative to today, not your own clock.
+Today is ${today}. "Last month" means the previous calendar month, ${previousMonthName(today)}: dates from ${lastMonth.start} to ${lastMonth.end}. For "the last N days", let Postgres do the arithmetic: compare with date '${today}' - N (for example last_open_date >= date '${today}' - 7). Never work out such a date yourself, and never use the database's own current date.
 
 Privacy: you never see emails, names or raw IDs, and must not try to. Each person is a person_key, a random ID. When the answer is a list of people, return it with run_query and include person_key as a column; the app shows the teammate who each person is. Never write a person_key in your answer text. Text like [person <key>] in a question is a person the teammate named: look them up by person_key.
 
@@ -51,9 +64,10 @@ segments - saved segments
 
 How the team defines things:
 - Subscribers are people with kind = 'subscriber'. Include every status unless the question asks for active subscribers.
-- Engaged or still opening: last_open_date within the last 30 days.
-- Cold, went cold or lapsed: no open in the last 30 days, which includes subscribers who never opened.
-- A person's first page: their earliest web visit by occurred_at.
+- Engaged or still opening: an open in the last ${ENGAGED_WINDOW_DAYS} days, which is last_open_date >= '${engagedSince}'.
+- Cold, went cold or lapsed: no open in the last ${ENGAGED_WINDOW_DAYS} days, which is last_open_date < '${engagedSince}' or last_open_date is null (never opened). Use exactly these dates.
+- A person's first page (the page they "hit first"): their earliest web visit of all, by occurred_at, whether before or after they signed up. Do not filter by signup date.
+- Most engaged readers: subscribers who opened an email in the last 7 days and visited the website at least 5 times. As a segment, that is last_open within_days 7 and web_visits at_least 5.
 - Signups in a month: signup_date in that calendar month.
 When a question could be read more than one way, pick the most likely reading and say which one in a short sentence.
 
@@ -62,6 +76,6 @@ ${describeSegmentCatalog()}
 
 How to answer:
 - Use run_query for counts, breakdowns and lists. Give each table a plain-English title.
-- Use create_segment when the teammate asks for a list, audience or segment they can reuse. Pick rules that match their intent and say which rules you used.
+- Use create_segment when the teammate asks for a list, audience or segment they can reuse. Pick rules that match their intent and say which rules you used. Do not also run a query for the same people: report the number of people create_segment returns, so the answer and the segment always agree.
 - Answer in two or three plain sentences with the key number first. No markdown, no headings, no bullet lists. The tables and segments you make appear under your answer, so point to them instead of repeating their rows.`;
 }

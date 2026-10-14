@@ -3,6 +3,7 @@ import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { Pool } from "pg";
 
 import { requireEnv } from "../env";
+import { withExplicitSslMode } from "./connection";
 
 /**
  * Any Drizzle Postgres database or open transaction. Every data function
@@ -17,7 +18,7 @@ const globalStore = globalThis as typeof globalThis & { cdpPool?: Pool };
 
 function getPool(): Pool {
   globalStore.cdpPool ??= new Pool({
-    connectionString: requireEnv("DATABASE_URL"),
+    connectionString: withExplicitSslMode(requireEnv("DATABASE_URL")),
   });
   return globalStore.cdpPool;
 }

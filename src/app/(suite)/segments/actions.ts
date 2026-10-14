@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import type { SegmentDefinition } from "@/apps/segments/definition";
+import { SAVED_SEGMENTS_PATH, segmentPath } from "@/apps/segments/paths";
 import {
   previewSegment,
   saveCheckedSegment,
@@ -13,7 +14,7 @@ import { deleteSegment } from "@/apps/segments/saved";
 import { getDb } from "@/shared/db/client";
 import { getToday } from "@/shared/today";
 
-/** Runs the builder's rules and returns the count and a sample of people. */
+/** Runs the builder's rules and returns how many people they pick. */
 export async function previewSegmentAction(definition: SegmentDefinition): Promise<SegmentPreview> {
   return previewSegment(getDb(), definition, getToday());
 }
@@ -21,11 +22,11 @@ export async function previewSegmentAction(definition: SegmentDefinition): Promi
 /** Saves a segment and opens it. Returns the problems when it cannot be saved. */
 export async function saveSegmentAction(name: string, definition: SegmentDefinition): Promise<SaveResult> {
   const result = await saveCheckedSegment(getDb(), name, definition);
-  if (result.ok) redirect(`/segments/${result.id}`);
+  if (result.ok) redirect(segmentPath(result.id));
   return result;
 }
 
 export async function deleteSegmentAction(formData: FormData): Promise<void> {
   await deleteSegment(getDb(), String(formData.get("id") ?? ""));
-  redirect("/segments");
+  redirect(SAVED_SEGMENTS_PATH);
 }

@@ -11,10 +11,6 @@ const nextConfig: NextConfig = {
       },
     },
   },
-  async redirects() {
-    // People is the home screen.
-    return [{ source: "/", destination: "/people", permanent: false }];
-  },
 };
 
 export default nextConfig;

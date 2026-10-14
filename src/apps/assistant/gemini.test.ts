@@ -7,8 +7,10 @@ import {
   createGeminiProvider,
   DEFAULT_GEMINI_MODELS,
   describeGeminiError,
+  GEMINI_RETRY_OPTIONS,
   geminiModels,
   isQuotaError,
+  isUnavailableError,
   plainResponse,
   readGeminiResponse,
   toGeminiContents,
@@ -18,6 +20,10 @@ const TOOLS = [{ name: "run_query", description: "Run SQL", parameters: { type: 
 
 function quotaError(): ApiError {
   return new ApiError({ message: "quota", status: 429 });
+}
+
+function busyError(): ApiError {
+  return new ApiError({ message: "This model is currently experiencing high demand.", status: 503 });
 }
 
 function response(parts: unknown[], finishReason = "STOP"): GenerateContentResponse {
@@ -124,9 +130,20 @@ describe("errors", () => {
     expect(describeGeminiError(quotaError())).toMatch(/free Gemini quota is used up/);
   });
 
+  it("recognises a busy model", () => {
+    expect(isUnavailableError(busyError())).toBe(true);
+    expect(isUnavailableError(quotaError())).toBe(false);
+    expect(describeGeminiError(busyError())).toMatch(/too busy to answer right now/);
+  });
+
+  it("retries busy errors in the SDK, but not a used-up quota", () => {
+    expect(GEMINI_RETRY_OPTIONS.httpStatusCodes).toContain(503);
+    expect(GEMINI_RETRY_OPTIONS.httpStatusCodes).not.toContain(429);
+  });
+
   it("points at the key when Gemini refuses the request", () => {
     expect(describeGeminiError(new ApiError({ message: "bad key", status: 400 }))).toMatch(/GEMINI_API_KEY/);
-    expect(describeGeminiError(new ApiError({ message: "boom", status: 500 }))).toBe("The Gemini API returned an error (500).");
+    expect(describeGeminiError(new ApiError({ message: "teapot", status: 418 }))).toBe("The Gemini API returned an error (418).");
     expect(describeGeminiError(new Error("network down"))).toBe("network down");
   });
 });
@@ -163,6 +180,35 @@ describe("createGeminiProvider", () => {
 
     expect(first.sent).toMatchObject({ model: "model-b" });
     expect(asked).toEqual(["model-a", "model-b", "model-b"]);
+  });
+
+  it("moves to the next model when the first is too busy", async () => {
+    const provider = createGeminiProvider({
+      models: ["model-a", "model-b"],
+      generate: async (request) => {
+        if (request.model === "model-a") throw busyError();
+        return response([{ text: "From b" }]);
+      },
+    });
+
+    const result = await provider.send(provider.buildRequest(input));
+
+    expect(result.sent).toMatchObject({ model: "model-b" });
+    expect(result.reply.text).toBe("From b");
+  });
+
+  it("does not move on for an error another model would not fix", async () => {
+    const asked: string[] = [];
+    const provider = createGeminiProvider({
+      models: ["model-a", "model-b"],
+      generate: async (request) => {
+        asked.push(request.model);
+        throw new ApiError({ message: "bad request", status: 400 });
+      },
+    });
+
+    await expect(provider.send(provider.buildRequest(input))).rejects.toBeInstanceOf(ApiError);
+    expect(asked).toEqual(["model-a"]);
   });
 
   it("gives up when the last model is out of quota too", async () => {

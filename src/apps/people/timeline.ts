@@ -16,6 +16,8 @@ export type TimelineEntry = {
   subject: string | null;
   /** Extra context, e.g. the channel the visit came from or the device. */
   detail: string | null;
+  /** When it reached us live. Null for visits, which come from the import. */
+  arrivedAt: Date | null;
 };
 
 function visitEntry(visit: Visit): TimelineEntry {
@@ -26,6 +28,7 @@ function visitEntry(visit: Visit): TimelineEntry {
     action: "Visited",
     subject: visit.page,
     detail: visit.utmSource ? `via ${visit.utmSource}` : null,
+    arrivedAt: null,
   };
 }
 
@@ -45,6 +48,7 @@ function eventEntry(event: AppEvent): TimelineEntry {
     action: event.event,
     subject: describeProperties(event.properties),
     detail: `device ${event.deviceId}`,
+    arrivedAt: event.receivedAt,
   };
 }
 

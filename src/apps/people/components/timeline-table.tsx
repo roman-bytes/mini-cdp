@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { NewLabel, RecentRow } from "@/components/recent-row";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -43,8 +44,17 @@ export function TimelineFilter({ basePath, current }: { basePath: string; curren
   );
 }
 
-/** Everything a person did on the website and in the app, newest first. */
-export function TimelineTable({ entries }: { entries: TimelineEntry[] }) {
+type TimelineTableProps = {
+  entries: TimelineEntry[];
+  /** When the server drew the page, in milliseconds. Decides which rows are new. */
+  renderedAt: number;
+};
+
+/**
+ * Everything a person did on the website and in the app, newest first. App
+ * events that arrived in the last hour are green.
+ */
+export function TimelineTable({ entries, renderedAt }: TimelineTableProps) {
   if (entries.length === 0) {
     return <p className="text-sm text-muted-foreground">No activity to show.</p>;
   }
@@ -61,8 +71,11 @@ export function TimelineTable({ entries }: { entries: TimelineEntry[] }) {
       </TableHeader>
       <TableBody>
         {entries.map((entry) => (
-          <TableRow key={entry.key}>
-            <TableCell className="whitespace-nowrap tabular-nums">{formatDateTime(entry.at)}</TableCell>
+          <RecentRow key={entry.key} arrivedAt={entry.arrivedAt} renderedAt={renderedAt}>
+            <TableCell className="whitespace-nowrap tabular-nums">
+              {formatDateTime(entry.at)}
+              <NewLabel />
+            </TableCell>
             <TableCell>
               <Badge variant={entry.source === "app" ? "secondary" : "outline"}>
                 {SOURCE_LABELS[entry.source]}
@@ -73,7 +86,7 @@ export function TimelineTable({ entries }: { entries: TimelineEntry[] }) {
               {entry.subject ? <span className="ml-2 font-mono text-sm">{entry.subject}</span> : null}
             </TableCell>
             <TableCell className="text-muted-foreground">{entry.detail}</TableCell>
-          </TableRow>
+          </RecentRow>
         ))}
       </TableBody>
     </Table>

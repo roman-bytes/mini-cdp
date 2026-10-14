@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { readImportFiles } from "@/apps/imports/read-files";
@@ -5,8 +6,9 @@ import { runImport } from "@/apps/imports/run-import";
 import type { Db } from "@/shared/db/client";
 import { createTestDb } from "@/shared/db/testing";
 
-import { clampPage, escapeLike, getProfile, searchPeople } from "./directory";
+import { clampPage, escapeLike, findMatchedIdentifiers, getProfile, listPeople, searchPeople } from "./directory";
 import { findPersonByIdentifier, listIdentifiers } from "./identifiers";
+import { profiles } from "./profiles-view";
 
 describe("escapeLike", () => {
   it("escapes the LIKE wildcards so they match literally", () => {
@@ -95,6 +97,87 @@ describe("the People directory, with the assessment files loaded", () => {
     const profile = await getProfile(db, personId!);
 
     expect(profile).toMatchObject({ kind: "app_only", status: null, hasAppAccount: true });
+  });
+
+  describe("listPeople", () => {
+    const TODAY = "2026-09-28";
+    const total = async (filters: Parameters<typeof listPeople>[1] extends infer O ? O extends { filters?: infer F } ? F : never : never) =>
+      (await listPeople(db, { filters, today: TODAY })).total;
+
+    it("filters by type and status", async () => {
+      expect(await total({ kind: "app_only" })).toBe(30);
+      expect(await total({ kind: "subscriber", status: "unsubscribed" })).toBe(290);
+    });
+
+    it("filters by signup source", async () => {
+      expect(await total({ source: "instagram" })).toBe(899);
+    });
+
+    it("filters by email engagement, matching the dashboard and segments", async () => {
+      expect(await total({ engagement: "engaged" })).toBe(2166);
+      expect(await total({ engagement: "never" })).toBe(470);
+      expect(await total({ engagement: "lapsed" })).toBe(2900 - 2166 - 470);
+      expect(await total({ source: "instagram", engagement: "never" })).toBe(146);
+    });
+
+    it("filters by app account and website visits", async () => {
+      expect(await total({ hasAppAccount: true })).toBe(930);
+      expect(await total({ hasVisitedWebsite: true })).toBe(1400);
+      expect(await total({ hasVisitedWebsite: false, kind: "subscriber" })).toBe(1500);
+    });
+
+    it("combines search text with filters", async () => {
+      expect(await total({ query: "julia.evans230", source: "instagram" })).toBe(1);
+      expect(await total({ query: "julia.evans230", source: "google" })).toBe(0);
+    });
+
+    it("applies a scope before the filters", async () => {
+      const instagramOnly = sql`${profiles.acquisitionSource} = 'instagram'`;
+
+      expect((await listPeople(db, { scope: instagramOnly })).total).toBe(899);
+      expect((await listPeople(db, { scope: instagramOnly, filters: { status: "active" } })).total).toBe(806);
+    });
+
+    it("needs today's date to filter by engagement", async () => {
+      await expect(listPeople(db, { filters: { engagement: "engaged" } })).rejects.toThrow(/today/);
+    });
+
+    it("sorts by a column in either direction, with empty values last", async () => {
+      const newest = await listPeople(db, { sort: { column: "signup_date", direction: "desc" }, pageSize: 3 });
+      const oldest = await listPeople(db, { sort: { column: "signup_date", direction: "asc" }, pageSize: 3 });
+      const leastRecentOpen = await listPeople(db, {
+        filters: { kind: "subscriber" },
+        sort: { column: "last_open", direction: "asc" },
+        page: 58,
+        pageSize: 50,
+      });
+
+      expect(newest.people[0].signupDate).toBe("2026-09-28");
+      expect(oldest.people[0].signupDate).toBe("2026-07-01");
+      expect(leastRecentOpen.people.at(-1)?.lastOpenDate).toBeNull();
+    });
+
+    it("sorts by web visits, most first", async () => {
+      const page = await listPeople(db, { sort: { column: "web_visits", direction: "desc" }, pageSize: 5 });
+      const counts = page.people.map((person) => person.webVisitCount);
+
+      expect(counts).toEqual([...counts].sort((a, b) => b - a));
+      expect(counts[0]).toBeGreaterThan(1);
+    });
+  });
+
+  describe("findMatchedIdentifiers", () => {
+    it("says which identifier made each person match", async () => {
+      const page = await searchPeople(db, { query: "u_2b6447a3" });
+      const matched = await findMatchedIdentifiers(db, [page.people[0].personId], "u_2b6447a3");
+
+      expect(matched.get(page.people[0].personId)).toEqual({ type: "user_id", value: "u_2b6447a3" });
+    });
+
+    it("returns nothing for empty text or no people", async () => {
+      expect((await findMatchedIdentifiers(db, [], "x")).size).toBe(0);
+      expect((await findMatchedIdentifiers(db, ["00000000-0000-4000-8000-000000000000"], "  ")).size).toBe(0);
+    });
   });
 
   it("returns null for an unknown or malformed ID", async () => {

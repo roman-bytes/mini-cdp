@@ -6,11 +6,12 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 
+import { withExplicitSslMode } from "@/shared/db/connection";
 import { MIGRATIONS_FOLDER } from "@/shared/db/migrations";
 import { requireEnv } from "@/shared/env";
 
 async function main(): Promise<void> {
-  const pool = new Pool({ connectionString: requireEnv("DATABASE_URL") });
+  const pool = new Pool({ connectionString: withExplicitSslMode(requireEnv("DATABASE_URL")) });
   try {
     await migrate(drizzle(pool), { migrationsFolder: MIGRATIONS_FOLDER });
     console.log("Migrations applied.");

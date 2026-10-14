@@ -114,6 +114,7 @@ describe("handleWebhookDelivery", () => {
     const log = await db.select().from(rawWebhookEvents).orderBy(asc(rawWebhookEvents.id));
 
     expect(log.map((row) => row.outcome)).toEqual(["accepted", "duplicate", "rejected"]);
+    expect(log.every((row) => row.source === "webhook")).toBe(true);
     expect(JSON.parse(log[0].body)).toEqual(SAMPLE);
     expect(log[2].reason).toMatch(/^event: /);
   });

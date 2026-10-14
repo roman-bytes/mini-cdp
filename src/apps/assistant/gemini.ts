@@ -16,8 +16,8 @@ import type { ChatTurn, ModelProvider, ModelReply, SentRequest, ToolCall, ToolSp
 
 /**
  * Free-tier models to try, in order. The first is the stronger model; when
- * its free daily quota runs out, the run moves to the next one. Override with
- * GEMINI_MODEL (comma-separated) in .env.local.
+ * it is out of free quota or too busy, the run moves to the next one.
+ * Override with GEMINI_MODEL (comma-separated) in .env.local.
  */
 export const DEFAULT_GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite"];
 
@@ -130,9 +130,37 @@ export function isQuotaError(error: unknown): boolean {
   return error instanceof ApiError && error.status === 429;
 }
 
+/** Server-side errors that usually pass, such as 503 "high demand". */
+export const RETRYABLE_STATUS_CODES = [500, 502, 503, 504];
+
+/** True when Gemini could not take the request right now (overloaded or briefly down). */
+export function isUnavailableError(error: unknown): boolean {
+  return error instanceof ApiError && RETRYABLE_STATUS_CODES.includes(error.status);
+}
+
+/** Worth trying the next model: this one is out of free quota, or too busy even after retries. */
+export function shouldTryNextModel(error: unknown): boolean {
+  return isQuotaError(error) || isUnavailableError(error);
+}
+
+/**
+ * The SDK retries a busy model a couple of times with a short back-off before
+ * giving up. A used-up quota (429) is not retried: it will not come back in
+ * seconds, so the run moves straight to the next model instead.
+ */
+export const GEMINI_RETRY_OPTIONS = {
+  attempts: 3,
+  initialDelay: 1,
+  maxDelay: 4,
+  httpStatusCodes: RETRYABLE_STATUS_CODES,
+};
+
 export function describeGeminiError(error: unknown): string {
   if (isQuotaError(error)) {
     return "The free Gemini quota is used up for now. It resets over time; try again later, or add a paid Gemini key.";
+  }
+  if (isUnavailableError(error)) {
+    return "Gemini is too busy to answer right now (high demand on Google's side). Try again in a minute.";
   }
   if (error instanceof ApiError && (error.status === 400 || error.status === 401 || error.status === 403)) {
     return `Gemini refused the request (${error.status}). Check that GEMINI_API_KEY in .env.local is a valid key.`;
@@ -149,15 +177,15 @@ function liveGenerate(): GenerateFunction {
   return (request) => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("GEMINI_API_KEY is not set. Add your key from Google AI Studio to .env.local.");
-    client ??= new GoogleGenAI({ apiKey });
+    client ??= new GoogleGenAI({ apiKey, httpOptions: { retryOptions: GEMINI_RETRY_OPTIONS } });
     return client.models.generateContent(request);
   };
 }
 
 /**
  * A ModelProvider backed by Gemini. Create one per question: it remembers
- * which model it is on, so once a run falls back to a second model because
- * the first one's free quota ran out, it stays there.
+ * which model it is on, so once a run falls back to a second model (because
+ * the first is out of free quota or too busy), it stays there.
  */
 export function createGeminiProvider(
   options: { models?: string[]; generate?: GenerateFunction } = {},
@@ -181,7 +209,7 @@ export function createGeminiProvider(
             reply: readGeminiResponse(response),
           };
         } catch (error) {
-          const canFallBack = isQuotaError(error) && current < models.length - 1;
+          const canFallBack = shouldTryNextModel(error) && current < models.length - 1;
           if (!canFallBack) throw error;
           current += 1;
         }

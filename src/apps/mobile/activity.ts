@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, count, desc, eq, max } from "drizzle-orm";
 
 import type { Db } from "@/shared/db/client";
 
@@ -31,4 +31,17 @@ export async function listEventsForPerson(db: Db, personId: string): Promise<App
 /** The latest app events from everyone, newest first by event time. */
 export async function listRecentEvents(db: Db, limit = 50): Promise<AppEvent[]> {
   return db.select().from(events).orderBy(desc(events.occurredAt), desc(events.id)).limit(limit);
+}
+
+/**
+ * A value that changes whenever a person gains or loses an app event: a new
+ * event, or an anonymous one attached to them at login. An open profile asks
+ * for it to know when to show new activity.
+ */
+export async function personActivityMarker(db: Db, personId: string): Promise<string> {
+  const [row] = await db
+    .select({ total: count(), latest: max(events.receivedAt) })
+    .from(events)
+    .where(eq(events.personId, personId));
+  return `${row?.total ?? 0}:${row?.latest?.toISOString() ?? "none"}`;
 }

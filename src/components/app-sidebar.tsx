@@ -1,4 +1,14 @@
-import { FileSpreadsheet, Filter, KeyRound, MessageSquare, Smartphone, Users } from "lucide-react";
+import {
+  Activity,
+  Bookmark,
+  FileSpreadsheet,
+  Filter,
+  House,
+  KeyRound,
+  MessageSquare,
+  Smartphone,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
@@ -18,10 +28,15 @@ import {
 /** The screens in the sidebar, grouped by the app they belong to. */
 export const NAV_GROUPS = [
   {
+    label: "Overview",
+    items: [{ href: "/", label: "Home", icon: House }],
+  },
+  {
     label: "People",
     items: [
       { href: "/people", label: "People", icon: Users },
       { href: "/segments", label: "Segments", icon: Filter },
+      { href: "/segments/saved", label: "Saved segments", icon: Bookmark },
     ],
   },
   {
@@ -32,6 +47,7 @@ export const NAV_GROUPS = [
     label: "Mobile app",
     items: [
       { href: "/mobile", label: "Events", icon: Smartphone },
+      { href: "/mobile/activity", label: "Activity log", icon: Activity },
       { href: "/settings/api-keys", label: "API keys", icon: KeyRound },
     ],
   },
@@ -41,12 +57,15 @@ export const NAV_GROUPS = [
   },
 ];
 
+/** Every link in the sidebar, so each link can tell whether it is the most specific match. */
+export const NAV_HREFS = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
+
 /** The left-hand navigation shared by every screen. */
 export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <Link href="/people" className="flex h-8 items-center gap-2 px-2 font-heading font-semibold tracking-tight">
+        <Link href="/" className="flex h-8 items-center gap-2 px-2 font-heading font-semibold tracking-tight">
           <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-xs text-primary-foreground">
             M
           </span>
@@ -75,7 +94,7 @@ export function AppSidebar() {
                           </PlainSidebarNavLink>
                         }
                       >
-                        <SidebarNavLink href={item.href} label={item.label}>
+                        <SidebarNavLink href={item.href} label={item.label} allHrefs={NAV_HREFS}>
                           {content}
                         </SidebarNavLink>
                       </Suspense>

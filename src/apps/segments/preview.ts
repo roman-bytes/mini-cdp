@@ -1,26 +1,16 @@
 import type { Db } from "@/shared/db/client";
 
 import { checkDefinition } from "./definition";
-import { countSegment, listSegmentMembers, type SegmentMember, type SegmentSize } from "./run";
+import { countSegment, type SegmentSize } from "./run";
 import { saveSegment } from "./saved";
 
-/** How many people the builder's preview lists. The count is always exact. */
-export const PREVIEW_MEMBER_LIMIT = 25;
+export type SegmentPreview = { ok: true; size: SegmentSize } | { ok: false; errors: string[] };
 
-export type SegmentPreview =
-  | { ok: true; size: SegmentSize; members: SegmentMember[] }
-  | { ok: false; errors: string[] };
-
-/** Checks rules from the builder and, when they are valid, runs them. */
+/** Checks rules from the builder and, when they are valid, counts the people they pick. */
 export async function previewSegment(db: Db, input: unknown, today: string): Promise<SegmentPreview> {
   const check = checkDefinition(input);
   if (!check.ok) return check;
-
-  return {
-    ok: true,
-    size: await countSegment(db, check.definition, today),
-    members: await listSegmentMembers(db, check.definition, today, PREVIEW_MEMBER_LIMIT),
-  };
+  return { ok: true, size: await countSegment(db, check.definition, today) };
 }
 
 export type SaveResult = { ok: true; id: string } | { ok: false; errors: string[] };

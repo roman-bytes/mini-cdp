@@ -8,6 +8,7 @@ import { createTestDb } from "@/shared/db/testing";
 import {
   getEngagementBySource,
   getHeadlineStats,
+  getOverview,
   getReach,
   getWeeklySignups,
   markWeekInProgress,
@@ -50,6 +51,15 @@ describe("People home numbers, with the assessment files loaded", () => {
     db = await createTestDb();
     await runImport(db, await readImportFiles("data"));
   }, 120_000);
+
+  it("reads everything the Home page needs in one call", async () => {
+    const overview = await getOverview(db, TODAY);
+
+    expect(overview.stats.subscribers).toBe(2900);
+    expect(overview.weeks.length).toBeGreaterThan(10);
+    expect(overview.sources).toHaveLength(7);
+    expect(overview.reach).toHaveLength(4);
+  });
 
   it("counts the headline numbers", async () => {
     expect(await getHeadlineStats(db, TODAY)).toEqual({

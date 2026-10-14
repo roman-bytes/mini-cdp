@@ -4,11 +4,14 @@ import { Suspense } from "react";
 import { listRecentEvents } from "@/apps/mobile/activity";
 import { EventSimulator } from "@/apps/mobile/components/event-simulator";
 import { EventsTable } from "@/apps/mobile/components/events-table";
+import { latestDeliveryMarker } from "@/apps/mobile/deliveries";
 import { APP_EVENT_NAMES } from "@/apps/mobile/schema";
-import { AutoRefresh } from "@/components/auto-refresh";
+import { LiveRefresh } from "@/components/live-refresh";
 import { LoadingMessage } from "@/components/loading-message";
 import { PageHeader, Section } from "@/components/page-header";
 import { getLiveDb } from "@/shared/db/live";
+import { DELIVERY_MARKER_URL } from "@/shared/live-urls";
+import { pageDrawnAt } from "@/shared/recent";
 
 import { sendSimulatedEventAction } from "./actions";
 
@@ -16,10 +19,19 @@ export const metadata: Metadata = { title: "Mobile" };
 
 const RECENT_EVENT_LIMIT = 100;
 
-/** The latest events, read from the database on every request. */
+/** The latest events, read fresh, and again whenever a new one arrives. */
 async function RecentEvents() {
-  const events = await listRecentEvents(await getLiveDb(), RECENT_EVENT_LIMIT);
-  return <EventsTable events={events} />;
+  const db = await getLiveDb();
+  // Read before the events, so one that lands meanwhile is not missed.
+  const marker = await latestDeliveryMarker(db);
+  const events = await listRecentEvents(db, RECENT_EVENT_LIMIT);
+
+  return (
+    <>
+      <LiveRefresh markerUrl={DELIVERY_MARKER_URL} initialMarker={marker} />
+      <EventsTable events={events} renderedAt={pageDrawnAt()} />
+    </>
+  );
 }
 
 export default function MobilePage() {
@@ -27,7 +39,7 @@ export default function MobilePage() {
     <div className="space-y-10">
       <PageHeader
         title="Mobile"
-        description="Events the app sends to POST /webhooks/app, as they arrive. This list refreshes every few seconds."
+        description="Events the app sends to POST /webhooks/app. New ones appear as they arrive, and anything from the last hour is green."
       />
 
       <Section title="Send a test event">
@@ -39,7 +51,6 @@ export default function MobilePage() {
       </Section>
 
       <Section title="Latest events">
-        <AutoRefresh everySeconds={5} />
         <Suspense fallback={<LoadingMessage />}>
           <RecentEvents />
         </Suspense>

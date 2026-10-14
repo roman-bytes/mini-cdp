@@ -20,6 +20,17 @@ const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
+const DATE_TIME_SECONDS_FORMAT = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+  timeZone: "UTC",
+});
+
 /** Formats a YYYY-MM-DD date for display, e.g. "Sep 28, 2026". */
 export function formatDate(isoDate: string): string {
   return DATE_FORMAT.format(new Date(`${isoDate}T00:00:00Z`));
@@ -28,6 +39,11 @@ export function formatDate(isoDate: string): string {
 /** Formats a moment for display in UTC, e.g. "Sep 28, 2026, 14:22 UTC". */
 export function formatDateTime(date: Date): string {
   return `${DATE_TIME_FORMAT.format(date)} UTC`;
+}
+
+/** Formats a moment to the second, in UTC, for logs, e.g. "Sep 28, 2026, 14:22:05 UTC". */
+export function formatDateTimeSeconds(date: Date): string {
+  return `${DATE_TIME_SECONDS_FORMAT.format(date)} UTC`;
 }
 
 /** The first value of a query-string parameter, which may be repeated or missing. */

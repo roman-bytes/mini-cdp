@@ -1,21 +1,18 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
-import { act } from "react";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-import { AppSidebar, NAV_GROUPS } from "./app-sidebar";
-import { AutoRefresh } from "./auto-refresh";
+import { AppSidebar, NAV_GROUPS, NAV_HREFS } from "./app-sidebar";
 import { LoadingMessage } from "./loading-message";
 import { PageHeader, Section } from "./page-header";
 import { Pagination, pageRange } from "./pagination";
-import { isActivePath, PlainSidebarNavLink, SidebarNavLink } from "./sidebar-nav-link";
+import { activeHref, isActivePath, PlainSidebarNavLink, SidebarNavLink } from "./sidebar-nav-link";
 
 const usePathname = vi.hoisted(() => vi.fn<() => string>());
-const refresh = vi.hoisted(() => vi.fn());
-vi.mock("next/navigation", () => ({ usePathname, useRouter: () => ({ refresh }) }));
+vi.mock("next/navigation", () => ({ usePathname }));
 
 beforeAll(() => {
   // The sidebar asks the browser whether the screen is phone-sized.
@@ -55,13 +52,38 @@ describe("isActivePath", () => {
   });
 });
 
+describe("activeHref", () => {
+  const hrefs = ["/people", "/segments", "/segments/saved"];
+
+  it("picks the most specific matching link", () => {
+    expect(activeHref("/segments/saved/123", hrefs)).toBe("/segments/saved");
+    expect(activeHref("/segments/saved", hrefs)).toBe("/segments/saved");
+    expect(activeHref("/segments", hrefs)).toBe("/segments");
+    expect(activeHref("/people/abc", hrefs)).toBe("/people");
+  });
+
+  it("returns null when no link matches", () => {
+    expect(activeHref("/elsewhere", hrefs)).toBeNull();
+  });
+
+  it("tells the Events page and the Activity log apart", () => {
+    expect(activeHref("/mobile/activity", NAV_HREFS)).toBe("/mobile/activity");
+    expect(activeHref("/mobile", NAV_HREFS)).toBe("/mobile");
+  });
+
+  it("matches Home only on the home page itself", () => {
+    expect(activeHref("/", ["/", ...hrefs])).toBe("/");
+    expect(activeHref("/people/abc", ["/", ...hrefs])).toBe("/people");
+  });
+});
+
 describe("SidebarNavLink", () => {
   beforeEach(() => {
     usePathname.mockReturnValue("/people/abc");
   });
 
   it("marks the link for the current section", () => {
-    renderInSidebar(<SidebarNavLink href="/people" label="People">People</SidebarNavLink>);
+    renderInSidebar(<SidebarNavLink href="/people" label="People" allHrefs={NAV_HREFS}>People</SidebarNavLink>);
 
     const link = screen.getByRole("link", { name: "People" });
     expect(link).toHaveAttribute("href", "/people");
@@ -69,7 +91,7 @@ describe("SidebarNavLink", () => {
   });
 
   it("leaves other links unmarked", () => {
-    renderInSidebar(<SidebarNavLink href="/segments" label="Segments">Segments</SidebarNavLink>);
+    renderInSidebar(<SidebarNavLink href="/segments" label="Segments" allHrefs={NAV_HREFS}>Segments</SidebarNavLink>);
 
     expect(screen.getByRole("link", { name: "Segments" })).not.toHaveAttribute("aria-current");
   });
@@ -85,7 +107,14 @@ describe("SidebarNavLink", () => {
 
 describe("AppSidebar", () => {
   beforeEach(() => {
-    usePathname.mockReturnValue("/segments");
+    usePathname.mockReturnValue("/segments/saved/abc");
+  });
+
+  it("marks only the most specific section as current", () => {
+    renderInSidebar(<AppSidebar />);
+
+    expect(screen.getByRole("link", { name: "Saved segments" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Segments" })).not.toHaveAttribute("aria-current");
   });
 
   it("links to every screen, grouped by app", () => {
@@ -99,10 +128,10 @@ describe("AppSidebar", () => {
     }
   });
 
-  it("shows the product name linking to People", () => {
+  it("shows the product name linking home", () => {
     renderInSidebar(<AppSidebar />);
 
-    expect(screen.getByRole("link", { name: /Mini CDP/ })).toHaveAttribute("href", "/people");
+    expect(screen.getByRole("link", { name: /Mini CDP/ })).toHaveAttribute("href", "/");
   });
 });
 
@@ -158,28 +187,6 @@ describe("Pagination", () => {
     render(<Pagination page={1} pageSize={50} total={20} hrefForPage={hrefForPage} />);
 
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
-  });
-});
-
-describe("AutoRefresh", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    refresh.mockClear();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("refreshes the page on a timer and stops when it is removed", () => {
-    const { unmount } = render(<AutoRefresh everySeconds={5} />);
-
-    act(() => vi.advanceTimersByTime(10_000));
-    expect(refresh).toHaveBeenCalledTimes(2);
-
-    unmount();
-    act(() => vi.advanceTimersByTime(10_000));
-    expect(refresh).toHaveBeenCalledTimes(2);
   });
 });
 

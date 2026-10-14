@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { firstParam, formatDate, formatDateTime, formatNumber, formatPercent, formatShortDate } from "./format";
+import {
+  firstParam,
+  formatDate,
+  formatDateTime,
+  formatDateTimeSeconds,
+  formatNumber,
+  formatPercent,
+  formatShortDate,
+} from "./format";
 
 describe("formatNumber", () => {
   it("adds thousands separators", () => {
@@ -17,6 +25,13 @@ describe("formatNumber", () => {
 describe("formatDate", () => {
   it("writes a date out in words", () => {
     expect(formatDate("2026-09-28")).toBe("Sep 28, 2026");
+  });
+});
+
+describe("formatDateTimeSeconds", () => {
+  it("shows the date and the time to the second, in UTC", () => {
+    expect(formatDateTimeSeconds(new Date("2026-09-28T14:22:05Z"))).toBe("Sep 28, 2026, 14:22:05 UTC");
+    expect(formatDateTimeSeconds(new Date("2026-09-28T00:00:09Z"))).toBe("Sep 28, 2026, 00:00:09 UTC");
   });
 });
 

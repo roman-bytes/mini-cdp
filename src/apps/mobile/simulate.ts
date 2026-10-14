@@ -2,8 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import type { Db } from "@/shared/db/client";
 
-import { ingestEvent, type IngestResult } from "./ingest-event";
-import { parseWebhookPayload } from "./webhook-payload";
+import { receiveEvent, type ReceiveResult } from "./webhook";
 
 /** What the Event simulator form collects. */
 export type SimulatedEventInput = {
@@ -15,9 +14,7 @@ export type SimulatedEventInput = {
   story: string;
 };
 
-export type SimulationResult =
-  | ({ ok: true } & IngestResult)
-  | { ok: false; errors: string[] };
+export type SimulationResult = ReceiveResult;
 
 /** The JSON body the mobile app would send for this input. */
 export function buildSimulatedPayload(input: SimulatedEventInput, now: Date): Record<string, unknown> {
@@ -34,15 +31,14 @@ export function buildSimulatedPayload(input: SimulatedEventInput, now: Date): Re
 
 /**
  * Sends a made-up event through the same checks and the same ingest function
- * as a real webhook delivery. Only the API key check is skipped, because the
- * person using the simulator is already signed in to the app.
+ * as a real webhook delivery, and logs it as coming from the simulator. Only
+ * the API key check is skipped, because the person using the simulator is
+ * already signed in to the app.
  */
 export async function sendSimulatedEvent(
   db: Db,
   input: SimulatedEventInput,
   now: Date = new Date(),
 ): Promise<SimulationResult> {
-  const check = parseWebhookPayload(buildSimulatedPayload(input, now));
-  if (!check.ok) return check;
-  return { ok: true, ...(await ingestEvent(db, check.event)) };
+  return receiveEvent(db, JSON.stringify(buildSimulatedPayload(input, now)), "simulator");
 }

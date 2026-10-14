@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { segmentPath } from "@/apps/segments/paths";
 import { formatNumber } from "@/shared/format";
 
 import type { PrivacySummary, TeammateTable } from "../runs";
@@ -106,7 +107,7 @@ export function AnswerSegment({ segment }: { segment: AssistantSegment }) {
       <CardHeader>
         <CardDescription>Segment saved</CardDescription>
         <CardTitle>
-          <Link className="underline-offset-4 hover:underline" href={`/segments/${segment.segmentId}`}>
+          <Link className="underline-offset-4 hover:underline" href={segmentPath(segment.segmentId)}>
             {segment.name}
           </Link>
         </CardTitle>

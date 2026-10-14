@@ -1,6 +1,7 @@
 import { asc, count, sql } from "drizzle-orm";
 
-import type { Profile } from "@/apps/people/directory";
+import { listPeople, type PeoplePage, type Profile } from "@/apps/people/directory";
+import type { PeopleParams } from "@/apps/people/people-params";
 import { neverOpened, profiles } from "@/apps/people/profiles-view";
 import type { Db } from "@/shared/db/client";
 
@@ -53,4 +54,18 @@ export async function listSegmentMembers(
     .orderBy(asc(profiles.email), asc(profiles.personId));
   const rows = limit === undefined ? await query : await query.limit(limit);
   return rows.map(tagNeverOpened);
+}
+
+/**
+ * One page of a segment's people, with the same search, filters, sorting and
+ * paging as the People table. The segment's rules come first; the filters
+ * only narrow within the segment.
+ */
+export async function listSegmentPeople(
+  db: Db,
+  definition: SegmentDefinition,
+  today: string,
+  params: PeopleParams,
+): Promise<PeoplePage> {
+  return listPeople(db, { ...params, today, scope: compileDefinition(definition, today) });
 }
