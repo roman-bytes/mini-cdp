@@ -6,7 +6,7 @@ The full design is in [docs/PLAN.md](docs/PLAN.md).
 
 ## Status
 
-Steps 1 to 5 of the 8 in the plan are built, and it is deployed on Cloudflare Workers. There is no login yet, so the deployed app is open to anyone with the link.
+Steps 1 to 6 of the 8 in the plan are built, and it is deployed on Cloudflare Workers. A shared password guards every page, the JSON API and the server actions; only the login page and the webhook (which carries its own API key) are open.
 
 | Requirement | State | Where |
 | --- | --- | --- |
@@ -62,7 +62,14 @@ One-time setup:
 npx wrangler login
 npx wrangler secret put DATABASE_URL     # the Neon *pooled* connection string
 npx wrangler secret put GEMINI_API_KEY
+npx wrangler secret put APP_PASSWORD     # the shared UI password
+npx wrangler secret put AUTH_SECRET      # a long random string; `openssl rand -base64 32`
 ```
+
+The login is a shared password checked on the server ([session.ts](src/shared/auth/session.ts)). A correct
+password sets a signed, httpOnly cookie; [middleware.ts](src/middleware.ts) requires it on every request
+except the login page and `/webhooks/app`. Attempts are rate-limited per IP. Changing `AUTH_SECRET` signs
+everyone out.
 
 Then, after committing:
 

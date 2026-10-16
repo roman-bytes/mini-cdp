@@ -285,7 +285,7 @@ Each step ends with a check against a number from the data, so progress is prova
 7. **Extras:** channel quality board, export and beehiiv stub, live feed.
 8. **README and Loom outline:** design decisions, trade-offs, what comes next with more time.
 
-Progress: steps 1 to 5 are built and tested (import, lookup, segments, webhook, assistant on the Gemini API free tier). The engagement score from step 3 is not built yet. Next: the login (step 6).
+Progress: steps 1 to 6 are built and tested (import, lookup, segments, webhook, assistant on the Gemini API free tier, and the password login gate). The engagement score from step 3 is not built yet.
 
 ## Open questions
 

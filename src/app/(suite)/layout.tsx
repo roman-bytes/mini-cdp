@@ -1,5 +1,6 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { GlobalSearch } from "@/components/global-search";
+import { LogoutButton } from "@/components/logout-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -14,8 +15,9 @@ export default function SuiteLayout({ children }: LayoutProps<"/">) {
           <SidebarTrigger />
           <Separator orientation="vertical" className="h-4" />
           <GlobalSearch />
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
             <ThemeToggle />
+            <LogoutButton />
           </div>
         </header>
         <div className="mx-auto w-full max-w-7xl flex-1 px-6 py-8">{children}</div>
